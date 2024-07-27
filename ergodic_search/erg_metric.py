@@ -3,39 +3,9 @@
 # given a spatial distribution
 
 import copy
-from xml.sax.handler import DTDHandler
 import torch
 
-# Dynamics model for computing trajectory given controls
-class DynModel(torch.nn.Module):
-
-    # Initialize the module
-    def __init__(self, start_pose, traj_steps, init_controls=None):
-        super(DynModel, self).__init__()
-        
-        self.start_pose = start_pose
-        self.traj_steps = traj_steps
-
-        # initialize parameters (controls) for module
-        control_cond = (init_controls.shape[0] != traj_steps)
-        if control_cond: print("[INFO] Initial controls does not have correct length, initializing to zero")
-        if init_controls == None or control_cond:
-            self.controls = torch.nn.parameter.Parameter(torch.zeros((traj_steps, 2)))
-        else:
-            self.controls = torch.nn.parameter.Parameter(torch.tensor(init_controls))
-
-    # Compute the trajectory given the controls
-    def forward(self):
-        traj = torch.zeros((self.traj_steps+1,3))
-        traj[0,:] = copy.copy(self.start_pose)
-        for i in self.traj_steps:
-            prev_pos = copy.copy(traj[i,:])
-            dx = torch.abs(self.controls[i,0]) * torch.cos(prev_pos[2])
-            dy = torch.abs(self.controls[i,0]) * torch.sin(prev_pos[2])
-            dth = 10*self.controls[1] # TODO: why multiplied by 10?
-            traj[i+1,:] = traj[i,:] + torch.tensor([dx, dy, dth])
-
-        return self.controls, traj
+from functools import partial
 
 
 # Module for computing ergodic loss over a PDF
@@ -46,10 +16,25 @@ class ErgLoss(torch.nn.Module):
         self.args = args
         self.init_flag=False
 
-        if fourier_freqs is not None: self.fourier_freqs = fourier_freqs
-        if freq_wts is not None: self.freq_wts = freq_wts
+        if args.num_freqs == 0 and fourier_freqs is None:
+            print("[ERROR] args.num_freqs needs to be positive or fourier_freqs must be provided. Returning with None.")
+            return None
+
+        if fourier_freqs is not None:
+            if not isinstance(fourier_freqs, torch.Tensor):
+                fourier_freqs = torch.tensor(fourier_freqs)
+        self.fourier_freqs = fourier_freqs
+        
+        if freq_wts is not None:
+            if not isinstance(freq_wts, torch.Tensor):
+                freq_wts = torch.tensor(freq_wts)
+        self.freq_wts = freq_wts
 
         if pdf is not None:
+            if not isinstance(pdf, torch.Tensor):
+                pdf = torch.tensor(pdf)
+            if len(pdf.shape) > 1:
+                pdf = pdf.flatten()
             self.pdf = pdf
             self.set_up_calcs()
 
@@ -57,23 +42,19 @@ class ErgLoss(torch.nn.Module):
     def forward(self, controls, traj, print_flag=False):
 
         # confirm we can do this
-        if ~self.init_flag:
+        if not self.init_flag:
             print("[ERROR] Ergodic loss module not initialized properly, need to provide map before attempting to calculate. Returning with None.")
             return None
 
-        # trajectory statistics
-        fk = torch.prod(torch.cos(traj[:,0:2] * self.k), dim=1) # TODO: need to check
-        ck = torch.mean(fk, dim=1)
-        ck = ck / self.hk
-
         # ergodic metric
-        erg_metric = torch.sum(self.lamk * torch.square(self.phik - ck))
+        erg_metric = torch.sum(self.lambdak * torch.square(self.phik - self.ck(traj)))
 
         # controls regularizer
         control_metric = torch.mean(controls**2, dim=0)
 
         # boundary condition counts number of points out of bounds
-        bound_metric = torch.sum(torch.ceil(torch.maximum(0, traj[:,0:2]-1)) + torch.ceil(torch.maximum(0, -traj[:,0:2])))
+        zt = torch.tensor([0])
+        bound_metric = torch.sum(torch.ceil(torch.maximum(zt, traj[:,:2]-1)) + torch.ceil(torch.maximum(zt, -traj[:,:2])))
 
         # print info if desired
         if print_flag:
@@ -83,26 +64,65 @@ class ErgLoss(torch.nn.Module):
 
     # Update the stored map
     def update_pdf(self, pdf, fourier_freqs=None, freq_wts=None):
+        if len(pdf.shape) > 1:
+            pdf = pdf.flatten()
         self.pdf = pdf
         if fourier_freqs is not None: self.fourier_freqs = fourier_freqs
         if freq_wts is not None: self.freq_wts = freq_wts
         self.set_up_calcs()
 
     # set up calculations related to pdf
+    # TODO: adjust so we can also use a 3d state space
+    # for this will need 3d frequencies, X, and Y, and d = 4 instead of 3 for lambda exponent
     def set_up_calcs(self):
 
-        # frequencies to use
-        if self.fourier_freqs is not None:
-            pass
+        # define frequencies to use if none have been provided
+        if self.fourier_freqs is None:
+            k1, k2 = torch.meshgrid(*[torch.arange(0, self.args.num_freqs, dtype=torch.float64)]*2)
+            k = torch.stack([k1.ravel(), k2.ravel()], dim=1)
+            self.k = torch.pi * k
+        else:
+            self.k = self.fourier_freqs
 
         # weights to use
+        if self.freq_wts is None:
+            self.lambdak = (1. + torch.linalg.norm(self.k / torch.pi, dim=1)**2)**(-3./2.)
+        else:
+            self.lambdak = self.freq_wts
+
+        # state variables corresponding to pdf grid
+        grid = torch.linspace(0, 1, steps = self.args.num_pixels, dtype=torch.float64)
+        X, Y = torch.meshgrid(grid, grid)
+        self.s = torch.stack([X.ravel(), Y.ravel()], dim=1)
+
+        # vmap function for computing fourier coefficients efficiently (hopefully)
+        self.fk = lambda x, k : torch.prod(torch.cos(x*k))
+        self.fk_vmap = lambda x, k : torch.vmap(self.fk, in_dims=(0,None))(x, k)
+
+        # compute hk normalizing factor
+        _hk = (2.*self.k + torch.sin(2.*self.k)) / (4.*self.k)
+        _hk[torch.isnan(_hk)] = 1.
+        self.hk = torch.sqrt(torch.prod(_hk, dim=1))
 
         # compute map stats
+        fk_map = torch.vmap(self.fk_vmap, in_dims=(None, 0))(self.s, self.k)
+        phik = fk_map @ self.pdf
+        phik = phik / phik[0]
+        self.phik = phik / self.hk
 
         # map stats for reconstruction
-
-        # compute hk
-        self.hk = torch.sqrt(torch.prod((2.0*self.k + torch.sin(2.0*self.k)) / (4.0*self.k)), dim=1) # TODO: check
+        self.map_recon = self.phik @ fk_map
 
         # set flag to true so we know we can compute the metric
         self.init_flag = True
+
+    # compute the trajectory statistics for a trajectory
+    def ck(self, traj):
+        fk_traj = torch.vmap(partial(self.fk_vmap, traj[:,:2]))(self.k)
+        ck = torch.mean(fk_traj, dim=1)
+        ck = ck / self.hk
+        return ck
+
+    # compute trajectory reconstruction of map
+    def traj_recon(self, traj):
+        return self.ck(traj) @ torch.vmap(self.fk_vmap, in_dims=(None, 0))(self.s, self.k)
