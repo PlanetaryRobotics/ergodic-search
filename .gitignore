@@ -6,9 +6,10 @@ __pycache__/
 # C extensions
 *.so
 
-# ignore images and model graphs
+# ignore images, model graphs, text files
 model_graph*
 *.png
+*.txt
 
 # Distribution / packaging
 .Python
