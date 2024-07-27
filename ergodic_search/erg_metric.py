@@ -92,7 +92,7 @@ class ErgLoss(torch.nn.Module):
 
         # state variables corresponding to pdf grid
         grid = torch.linspace(0, 1, steps = self.args.num_pixels, dtype=torch.float64)
-        X, Y = torch.meshgrid(grid, grid)
+        Y, X = torch.meshgrid(grid, grid) # torch creates these opposite to how numpy does it
         self.s = torch.stack([X.ravel(), Y.ravel()], dim=1)
 
         # vmap function for computing fourier coefficients efficiently (hopefully)
