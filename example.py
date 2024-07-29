@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # example use of ergodic trajectory planner
 
+import torch
 import numpy as np
 from scipy.stats import multivariate_normal as norm
 import matplotlib.pyplot as plt
@@ -9,9 +10,9 @@ from ergodic_search import erg_planner
 from ergodic_search.dynamics import DiffDrive
 
 # map settings
-LOCS = [[0.25, 0.25], [0.85, 0.5], [0.6, 0.85]]
-STDS = [0.1, 0.02, 0.01]
-WTS = [8, 1, 0.9]
+LOCS = [[0.2, 0.8], [0.8, 0.2]]
+STDS = [0.01, 0.01]
+WTS = [1, 1]
 
 # create example map with a few gaussian densities in it
 def create_map(dim):
@@ -22,7 +23,7 @@ def create_map(dim):
     map_grid = np.dstack((xgrid, ygrid))
 
     # add a few gaussians
-    for i in range(3):
+    for i in range(len(LOCS)):
         dist = norm(LOCS[i], STDS[i])
         vals = dist.pdf(map_grid)
         map += WTS[i] * vals
@@ -40,26 +41,38 @@ if __name__ == "__main__":
     args = erg_planner.ErgArgs()
 
     # set a more interesting starting position and initial controls
-    args.start_pose = [0.2, 0.4, 0]
+    args.start_pose = [0.2, 0.2, 0]
+    args.end_pose = [0.8, 0.8, 0]
     args.num_freqs = 10
 
-    init_controls = np.zeros((args.traj_steps,2))
-    dx = (0.8 - 0.2) / args.traj_steps
-    init_controls[:,0] = dx
-    print(init_controls)
-
-    # create dynamics module so we can test it
+    # create dynamics module
     diff_drive = DiffDrive(args.start_pose, args.traj_steps)
-    traj = diff_drive.forward(init_controls)
-    print(traj)
+    
+    # create initial trajectory
+    ref_tr_init = np.zeros((args.traj_steps, 3))
+    x_dist = args.end_pose[0] - args.start_pose[0]
+    y_dist = args.end_pose[1] - args.start_pose[1]
+    for i in range(args.traj_steps):
+        ref_tr_init[i,0] = (args.start_pose[0] + (x_dist * (i+1))/(args.traj_steps-1))
+        ref_tr_init[i,1] = (args.start_pose[1] + (y_dist * (i+1))/(args.traj_steps-1))
+    
+    # have first and last poses be the only ones with changes in angle
+    angle = np.pi / 4
+    ref_tr_init[:-1, 2] = angle
+    ref_tr_init[-1, 2] = args.end_pose[2]
+    # print(ref_tr_init)
 
-    controls = diff_drive.inverse(traj)
-    print(controls)
+    with torch.no_grad():
+        # this is to trick pytorch into ignoring the computation here
+        # otherwise it'll complain about controls not being a leaf tensor
+        init_controls = diff_drive.inverse(ref_tr_init)
+    # print(init_controls)
 
     # create example map
     map = create_map(args.num_pixels)
 
     # initialize planner
+    init_controls.requires_grad = True
     planner = erg_planner.ErgPlanner(args, map, init_controls=init_controls, dyn_model=diff_drive)
 
     # generate a trajectory

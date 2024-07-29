@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from ergodic_search import erg_metric
 from ergodic_search.dynamics import DiffDrive
 
+
 # parameters that can be changed
 def ErgArgs():
     parser = argparse.ArgumentParser()
@@ -19,19 +20,22 @@ def ErgArgs():
     parser.add_argument('--gpu', action='store_true', help='Flag for using the GPU instead of CPU')
     parser.add_argument('--traj_steps', type=int, default=100, help='Number of steps in trajectory')
     parser.add_argument('--iters', type=int, default=1000, help='Maximum number of iterations for trajectory optimization')
-    parser.add_argument('--epsilon', type=float, default=0.001, help='Threshold for ergodic metric (if lower than this, optimization stops)')
+    parser.add_argument('--epsilon', type=float, default=0.005, help='Threshold for ergodic metric (if lower than this, optimization stops)')
     parser.add_argument('--start_pose', type=float, nargs=3, default=[0,0,0], help='Starting position in x, y, theta')
+    parser.add_argument('--end_pose', type=float, nargs=3, default=[0,0,0], help='Ending position in x, y, theta')
     parser.add_argument('--num_freqs', type=int, default=0, help='Number of frequencies to use. If 0, expects fourier_freqs provided.')
     parser.add_argument('--erg_wt', type=float, default=1, help='Weight on ergodic metric in loss function')
-    parser.add_argument('--transl_vel_wt', type=float, default=0.03, help='Weight on translational velocity control size in loss function')
-    parser.add_argument('--ang_vel_wt', type=float, default=0.03, help='Weight on angular velocity control size in loss function')
+    parser.add_argument('--transl_vel_wt', type=float, default=0.1, help='Weight on translational velocity control size in loss function')
+    parser.add_argument('--ang_vel_wt', type=float, default=0.05, help='Weight on angular velocity control size in loss function')
     parser.add_argument('--bound_wt', type=float, default=1000, help='Weight on boundary condition in loss function')
+    parser.add_argument('--end_pose_wt', type=float, default=0.5, help='Weight on end position in loss function')
+    parser.add_argument('--debug', action='store_true', help='Whether to print loss components for debugging')
     args = parser.parse_args()
     print(args)
     return args
 
 # ergodic planner
-class ErgPlanner(object):
+class ErgPlanner():
 
     # initialize planner
     def __init__(self, args, pdf=None, init_controls=None, dyn_model=None, fourier_freqs=None, freq_wts=None, ):
@@ -42,7 +46,7 @@ class ErgPlanner(object):
         self.fourier_freqs = fourier_freqs
         self.freq_wts = freq_wts
 
-        # convert starting position to a tensor
+        # convert starting and ending positions to tensors
         self.start_pose = torch.tensor(self.args.start_pose, requires_grad=True)
 
         # set up pdf, dynamics model, and loss module
@@ -50,12 +54,26 @@ class ErgPlanner(object):
             self.pdf = pdf.flatten()
 
         if dyn_model is None:
-            self.dyn_model = DiffDrive(self.start_pose, self.args.traj_steps, init_controls)
+            self.dyn_model = DiffDrive(self.start_pose, self.args.traj_steps)
         else:
-            self.dyn_model = dyn_model(self.start_pose, self.args.traj_steps, init_controls)
+            self.dyn_model = dyn_model
 
-        self.optimizer = torch.optim.Adam(self.dyn_model.parameters(), lr=self.args.learn_rate)
-        self.loss = erg_metric.ErgLoss(self.args, self.pdf, fourier_freqs, freq_wts)
+        # initialize parameters (controls) for module
+        if init_controls is None:
+            self.controls = torch.zeros((args.traj_steps, 2), requires_grad=True)
+
+        elif (init_controls.shape[0] != args.traj_steps):
+            print("[INFO] Initial controls do not have correct length, initializing to zero")
+            self.controls = torch.zeros((args.traj_steps, 2), requires_grad=True)
+
+        else:
+            if not isinstance(init_controls, torch.Tensor):
+                init_controls = torch.tensor(init_controls, requires_grad=True)
+            self.controls = init_controls
+
+        self.optimizer = torch.optim.Adam([self.controls], lr=self.args.learn_rate)
+        self.loss = erg_metric.ErgLoss(self.args, dyn_model, self.pdf, fourier_freqs, freq_wts)
+
 
     # update the spatial distribution and store it in the loss computation module
     def update_pdf(self, pdf, fourier_freqs, freq_wts):
@@ -71,8 +89,7 @@ class ErgPlanner(object):
         # iterate
         for i in range(self.args.iters):
             self.optimizer.zero_grad()
-            traj = self.dyn_model(self.dyn_model.controls)
-            erg = self.loss(self.dyn_model.controls, traj, print_flag=debug)
+            erg = self.loss(self.controls, print_flag=debug)
 
             # print progress every 100th iter
             if i % 100 == 0 and not debug:
@@ -83,11 +100,14 @@ class ErgPlanner(object):
                 break
             
             erg.backward()
+            
+            # print(erg.grad)
             self.optimizer.step()
 
         # final controls and trajectory
-        self.controls = self.dyn_model.controls.detach()
-        self.traj = self.dyn_model(self.controls)
+        with torch.no_grad():
+            self.controls = self.controls.detach()
+            self.traj = self.loss.dyn_model.forward(self.controls)
 
         print("[INFO] Final ergodic metric is {:4.4f}".format(erg))
 
@@ -106,22 +126,22 @@ class ErgPlanner(object):
         _, ax = plt.subplots(2,2)
 
         # original map with trajectory
-        ax[0,0].imshow(self.pdf.reshape((self.args.num_pixels, self.args.num_pixels)), extent=[0,1,1,0])
+        ax[0,0].imshow(self.pdf.reshape((self.args.num_pixels, self.args.num_pixels)), extent=[0,1,0,1], origin='lower')
         ax[0,0].set_title('Original Map and Trajectory')
         ax[0,0].scatter(traj_np[:,0], traj_np[:,1], c='r', s=2)
 
         # reconstructed map from map stats
-        ax[1,0].imshow(map_recon, extent=[0,1,1,0])
+        ax[1,0].imshow(map_recon, extent=[0,1,0,1], origin='lower')
         ax[1,0].set_title('Reconstructed Map from Map Stats')
         ax[1,0].scatter(traj_np[:,0], traj_np[:,1], c='r', s=2)
 
         # reconstructed map from trajectory stats
-        ax[1,1].imshow(traj_recon, extent=[0,1,1,0])
+        ax[1,1].imshow(traj_recon.T, extent=[0,1,0,1], origin='lower')
         ax[1,1].set_title('Reconstructed Map from Traj Stats')
         ax[1,1].scatter(traj_np[:,0], traj_np[:,1], c='r', s=2)
 
         # error between traj stats and map stats
-        ax[0,1].imshow(map_recon - traj_recon, extent=[0,1,1,0])
+        ax[0,1].imshow(map_recon - traj_recon.T, extent=[0,1,0,1], origin='lower')
         ax[0,1].set_title('Reconstruction Difference (Map - Traj)')
         ax[0,1].scatter(traj_np[:,0], traj_np[:,1], c='r', s=2)
 

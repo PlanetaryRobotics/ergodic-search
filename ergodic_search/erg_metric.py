@@ -7,14 +7,16 @@ import torch
 
 from functools import partial
 
+from ergodic_search.dynamics import DiffDrive
 
 # Module for computing ergodic loss over a PDF
 class ErgLoss(torch.nn.Module):
 
-    def __init__(self, args, pdf=None, fourier_freqs=None, freq_wts=None):
+    def __init__(self, args, dyn_model, pdf=None, fourier_freqs=None, freq_wts=None):
         super(ErgLoss, self).__init__()
         self.args = args
         self.init_flag=False
+        self.end_pose = torch.tensor(self.args.end_pose, requires_grad=True)
 
         if args.num_freqs == 0 and fourier_freqs is None:
             print("[ERROR] args.num_freqs needs to be positive or fourier_freqs must be provided. Returning with None.")
@@ -38,13 +40,19 @@ class ErgLoss(torch.nn.Module):
             self.pdf = pdf
             self.set_up_calcs()
 
+        self.dyn_model = dyn_model
+
+
     # compute the ergodic metric
-    def forward(self, controls, traj, print_flag=False):
+    def forward(self, controls, print_flag=False):
 
         # confirm we can do this
         if not self.init_flag:
             print("[ERROR] Ergodic loss module not initialized properly, need to provide map before attempting to calculate. Returning with None.")
             return None
+
+        # get the trajectory from the dynamics model
+        traj = self.dyn_model.forward(controls)
 
         # ergodic metric
         erg_metric = torch.sum(self.lambdak * torch.square(self.phik - self.ck(traj)))
@@ -54,13 +62,21 @@ class ErgLoss(torch.nn.Module):
 
         # boundary condition counts number of points out of bounds
         zt = torch.tensor([0])
-        bound_metric = torch.sum(torch.ceil(torch.maximum(zt, traj[:,:2]-1)) + torch.ceil(torch.maximum(zt, -traj[:,:2])))
+        bound_metric = torch.sum(torch.maximum(zt, traj[:,:2]-1) + torch.maximum(zt, -traj[:,:2]))
+
+        # end point loss
+        end_metric = torch.sum((self.end_pose - traj[-1,:])**2)
 
         # print info if desired
         if print_flag:
-            print("LOSS: erg = {:4.4f}, control = ({:4.4f}, {:4.4f}), boundary = {:4.4f}".format(erg_metric, control_metric[0], control_metric[1], bound_metric))
+            print("LOSS: erg = {:4.4f}, control = ({:4.4f}, {:4.4f}), boundary = {:4.4f}, end = {:4.4f}".format(erg_metric, control_metric[0], control_metric[1], bound_metric, end_metric))
 
-        return (self.args.erg_wt * erg_metric) + (self.args.transl_vel_wt * control_metric[0]) + (self.args.ang_vel_wt * control_metric[1]) + (self.args.bound_wt * bound_metric)
+        loss = (self.args.erg_wt * erg_metric) \
+            + (self.args.transl_vel_wt * control_metric[0]) \
+            + (self.args.ang_vel_wt * control_metric[1]) \
+            + (self.args.bound_wt * bound_metric) \
+            + (self.args.end_pose_wt * end_metric)
+        return loss
 
     # Update the stored map
     def update_pdf(self, pdf, fourier_freqs=None, freq_wts=None):
@@ -86,13 +102,14 @@ class ErgLoss(torch.nn.Module):
 
         # weights to use
         if self.freq_wts is None:
-            self.lambdak = (1. + torch.linalg.norm(self.k / torch.pi, dim=1)**2)**(-3./2.)
+            # MAH NOTE: my reading of the literature suggests the coefficient below should be (-3/2) instead of (-4/2)
+            # however MOES uses (-4/2) and that seems to produce better results, at least for this implementation
+            self.lambdak = (1. + torch.linalg.norm(self.k / torch.pi, dim=1)**2)**(-4./2.)
         else:
             self.lambdak = self.freq_wts
 
         # state variables corresponding to pdf grid
-        grid = torch.linspace(0, 1, steps = self.args.num_pixels, dtype=torch.float64)
-        Y, X = torch.meshgrid(grid, grid) # torch creates these opposite to how numpy does it
+        X, Y = torch.meshgrid(*[torch.linspace(0, 1, self.args.num_pixels, dtype=torch.float64)]*2) # torch creates these opposite to how numpy does it
         self.s = torch.stack([X.ravel(), Y.ravel()], dim=1)
 
         # vmap function for computing fourier coefficients efficiently (hopefully)
