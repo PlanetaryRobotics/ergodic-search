@@ -4,7 +4,7 @@
 import torch
 
 # Dynamics model for computing trajectory given controls
-class DiffDrive():
+class DiffDrive(torch.nn.Module):
 
     # Initialize the module
     def __init__(self, start_pose, traj_steps):
