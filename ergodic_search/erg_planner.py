@@ -3,9 +3,7 @@
 # given a spatial distribution and starting location
 
 import argparse
-import copy
 import torch
-import numpy as np
 import matplotlib.pyplot as plt
 
 from ergodic_search import erg_metric
