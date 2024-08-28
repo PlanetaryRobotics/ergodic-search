@@ -21,8 +21,8 @@ def ErgArgs():
     parser.add_argument('--traj_steps', type=int, default=100, help='Number of steps in trajectory')
     parser.add_argument('--iters', type=int, default=1000, help='Maximum number of iterations for trajectory optimization')
     parser.add_argument('--epsilon', type=float, default=0.005, help='Threshold for ergodic metric (if lower than this, optimization stops)')
-    parser.add_argument('--start_pose', type=float, nargs=3, default=[0,0,0], help='Starting position in x, y, theta')
-    parser.add_argument('--end_pose', type=float, nargs=3, default=[0,0,0], help='Ending position in x, y, theta')
+    parser.add_argument('--start_pose', type=float, nargs=3, default=[0.,0.,0.], help='Starting position in x, y, theta')
+    parser.add_argument('--end_pose', type=float, nargs=3, default=[0.,0.,0.], help='Ending position in x, y, theta')
     parser.add_argument('--num_freqs', type=int, default=0, help='Number of frequencies to use. If 0, expects fourier_freqs provided.')
     parser.add_argument('--erg_wt', type=float, default=1, help='Weight on ergodic metric in loss function')
     parser.add_argument('--transl_vel_wt', type=float, default=0.1, help='Weight on translational velocity control size in loss function')
@@ -38,7 +38,7 @@ def ErgArgs():
 class ErgPlanner():
 
     # initialize planner
-    def __init__(self, args, pdf=None, init_controls=None, dyn_model=None, fourier_freqs=None, freq_wts=None, ):
+    def __init__(self, args, pdf=None, init_controls=None, dyn_model=None, fourier_freqs=None, freq_wts=None):
         
         # store information
         self.args = args
@@ -48,15 +48,17 @@ class ErgPlanner():
 
         # convert starting and ending positions to tensors
         self.start_pose = torch.tensor(self.args.start_pose, requires_grad=True)
+        self.end_pose = torch.tensor(self.args.end_pose, requires_grad=True)
 
         # set up pdf, dynamics model, and loss module
         if pdf is not None and len(pdf.shape) > 1:
             self.pdf = pdf.flatten()
 
-        if dyn_model is None:
-            self.dyn_model = DiffDrive(self.start_pose, self.args.traj_steps)
-        else:
+        if dyn_model is not None:
             self.dyn_model = dyn_model
+        else:
+            print("Using DiffDrive dynamics model")
+            self.dyn_model = DiffDrive(self.start_pose, self.args.traj_steps)
 
         # initialize parameters (controls) for module
         if init_controls is None:
@@ -76,12 +78,19 @@ class ErgPlanner():
 
 
     # update the spatial distribution and store it in the loss computation module
-    def update_pdf(self, pdf, fourier_freqs, freq_wts):
+    def update_pdf(self, pdf, fourier_freqs=None, freq_wts=None):
         if len(pdf.shape) > 1:
             self.pdf = pdf.flatten()
         self.fourier_freqs = fourier_freqs
         self.freq_wts = freq_wts
         self.loss.update_pdf(self.pdf, self.fourier_freqs, self.freq_wts)
+
+    # update the controls given a new set
+    def update_controls(self, controls):
+        if not isinstance(controls, torch.Tensor):
+            controls = torch.tensor(controls, requires_grad=True)
+        self.controls = controls
+        self.controls.requires_grad = True
 
     # compute ergodic trajectory over spatial distribution
     def compute_traj(self, debug=False):
