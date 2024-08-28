@@ -1,6 +1,6 @@
 # Ergodic Search
 
-This repository implements basic ergodic search as outlined in [1](#1) and modified from MO-ES [2](#2).
+This repository implements basic ergodic search as outlined in [[1]](#1) and modified from MO-ES [[2]](#2).
 This optimization strategy learns control parameters (translational and angular velocities) that minimize
 the ergodic metric, in addition to other loss components.
 In addition to performing trajectory optimization over single maps in a static manner, the planner
@@ -143,19 +143,21 @@ as the ```ErgLoss``` class. This class is a PyTorch module and implements discre
 either the provided frequencies or number of frequencies. In addition, the loss includes components associated with the
 trajectory going out of bounds, the end point, and the maximum translational and angular velocities. The full loss function
 is
-
-$$\mathcal{L}=w_{erg}\left(\sum_k \Lambda_k (\phi_k - \c_k(\ksi))^2 \right) + w_{transl_vel}\mathcal{L}_{transl_vel} + w_{ang_vel}\mathcal{L}_{ang_vel} + w_{bound}\mathcal{L}_{bound} + w_{end_pose}\mathcal{L}_{end_pose}$$
+```math
+\mathcal{L} = w_{erg}\left(\sum_k \Lambda_k (\phi_k - c_k(\xi))^2 \right) + w_{transl}\frac{\sum v_{transl}^2}{T} + w_{ang} \frac{\sum v_{ang}^2}{T} + w_{end} \sum(\xi_T - end)^2 + w_{bound}\mathcal{L}_{bound}
+```
 
 #### Ergodic Metric
 
 The first term in the equation above is the ergodic metric, which computes the difference between Fourier components associated
-with the map ($\phi_k$) and the trajectory ($\c_k(\ksi)$, where $\ksi$ is the trajectory). The Fourier components are defined based on a set of frequencies $\omega$ indexed by a 2D index $k$, either provided via ```fourier_freqs``` to the planner and loss classes or set to integers between 0 and ```args.num_freqs```. The $\Lambda$ 
+with the map ($\phi_k$) and the trajectory ($c_k(\xi)$, where $\xi$ is the trajectory). The Fourier components are defined based on a set of frequencies $\omega$ indexed by a 2D index $k$, either provided via ```fourier_freqs``` to the planner and loss classes or set to integers between 0 and ```args.num_freqs```. The $\Lambda$ 
 values are weights associated with each frequency, either provided via ```freq_wts``` or defined as $\Lambda_k = \frac{1}{(1+||k||^2)^s}$ where $s = 2$ based on practical performance of the algorithm.
 
 The discrete Fourier components are computed using Fourier basis functions $F_k(\mathbb{x}) = \frac{1}{h_k}cos(\omega_k \pi \mathbb{x}_1)cos(\omega_k \pi \mathbb{x}_2)$ as
 
 $$\phi_k = \sum_X \phi(\mathbb{x})F_k(\mathbb{x})$$
-$$\c_k = \frac{1}{T} \sum_t F_k(\ksi(t))$$
+
+$$c_k = \frac{1}{T} \sum_t F_k(\xi(t))$$
 
 for a set of grid points defined across the map domain. The $h_k$ normalizing factors in the Fourier components are computed as 
 
@@ -167,12 +169,12 @@ The second and third terms compute losses associated with the translational and 
 defined as the average squared velocity across the set of controls. However, the terms have been separated to allow for application 
 of different weights to each terms.
 
-The fourth term computes a loss associated with the trajectory passing outside of the bounds of the map. This is set to the distance 
+The fourth term computes a loss associated with the final position in the trajectory, which should be close to the desired end position.
+This is defined as the squared Euclidean distance between the desired end position and the actual end position.
+
+The final term computes a loss associated with the trajectory passing outside of the bounds of the map. This is set to the distance 
 to the boundary for trajectory points outside of the bounds and 0 for points inside the bounds, summed across the entire trajectory. 
 The weight on this component is generally set very high compared to the other loss terms to ensure the trajectory remains in the map.
-
-The final term computes a loss associated with the final position in the trajectory, which should be close to the desired end position.
-This is defined as the squared Euclidean distance between the desired end position and the actual end position.
 
 #### Class Methods
 
