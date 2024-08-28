@@ -1,6 +1,6 @@
 # Ergodic Search
 
-This repository implements basic ergodic search as outlined in [PAPER] and modified from [MO-ES].
+This repository implements basic ergodic search as outlined in [1](#1) and modified from MO-ES [2](#2).
 This optimization strategy learns control parameters (translational and angular velocities) that minimize
 the ergodic metric, in addition to other loss components.
 In addition to performing trajectory optimization over single maps in a static manner, the planner
@@ -243,4 +243,7 @@ dynamics modules should be implemented as a PyTorch module with a ```forward``` 
 
 ## References
 
+<a name="1"></a>[1] G. Mathew and I. Mezić, "Metrics for ergodicity and design of ergodic dynamics for multi-agent systems," Physica D: Nonlinear Phenomena, vol. 240, no. 4-5, pp. 432-442, Feb. 2011, doi: [10.1016/j.physd.2010.10.010](https://www.sciencedirect.com/science/article/pii/S016727891000285X).
 
+
+<a name="2"></a>[2] Z. Ren et al., "A Local Optimization Framework for Multi-Objective Ergodic Search," Proceedings of Robotics: Science and Systems, New York City, NY, USA, June 2022. Code available in the [rap-lab-org/public_moes](https://github.com/rap-lab-org/public_moes) repository.

@@ -8,7 +8,6 @@ __pycache__/
 
 # ignore images, model graphs, text files
 model_graph*
-*.png
 *.txt
 
 # Distribution / packaging
