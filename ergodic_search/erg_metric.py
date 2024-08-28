@@ -2,12 +2,10 @@
 # class for computing the ergodic metric over a trajectory 
 # given a spatial distribution
 
-import copy
 import torch
 
 from functools import partial
 
-from ergodic_search.dynamics import DiffDrive
 
 # Module for computing ergodic loss over a PDF
 class ErgLoss(torch.nn.Module):
@@ -77,6 +75,13 @@ class ErgLoss(torch.nn.Module):
             + (self.args.bound_wt * bound_metric) \
             + (self.args.end_pose_wt * end_metric)
         return loss
+
+    # just compute the ergodic metric
+    def calc_erg_metric(self, controls):
+        with torch.no_grad():
+            traj = self.dyn_model.forward(controls)
+            erg = torch.sum(self.lambdak * torch.square(self.phik - self.ck(traj)))
+            return erg
 
     # Update the stored map
     def update_pdf(self, pdf, fourier_freqs=None, freq_wts=None):
