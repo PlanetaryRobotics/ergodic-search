@@ -11,12 +11,13 @@ optimization step.
 ## Table of Contents
 
 - [Dependencies](#dependencies)
-- [Installation](#how-to-install)
-- [Usage](#how-to-use)
-    - [ErgPlanner](#the-ergplanner-class)
-    - [ErgLoss](#the-ergloss-class)
+- [Installation](#installation)
+- [Usage](#usage)
+    - [Ergodic Planner](#the-ergplanner-class)
+    - [Ergodic Loss](#the-ergloss-class)
     - [Examples](#examples)
     - [Custom Dynamics](#incorporating-dynamics-models)
+- [Troubleshooting](#troubleshooting-tips)
 - [References](#references)
 
 ## Dependencies
@@ -33,7 +34,7 @@ a CPU or GPU.
 If this code is being run on a GPU, CUDA must additionally be installed per the specifications for 
 the GPU and the version of PyTorch being used. The code was tested on a [GPU INFO] GPU with CUDA 12.4.
 
-## How to Install
+## Installation
 
 Once the dependencies have been installed, clone this repository and navigate into it:
 ```
@@ -43,7 +44,7 @@ cd ergodic-search
 
 Then the package can be locally installed with ```pip install -e .```
 
-## How to Use
+## Usage
 
 This section provides more details on how this repository can be used to perform ergodic search on 
 custom maps with various parameter settings. Two example scripts are provided in the top level directory. 
@@ -128,6 +129,10 @@ review the available arguments:
 | ```bound_wt``` | float | 100 | Weight on boundary component of loss |
 | ```end_pose_wt``` | float | 0.5 | Weight on end position component of loss |
 
+_Note_: These weights can be set to 0 to remove any component from consideration when optimizing. The most useful application 
+of this property is to remove the need for an end point by setting ```end_pose_wt``` to 0. This will still require provision of an 
+end position in the arguments but this end position is ignored and can be safely set to ```[0,0,0]```.
+
 **Flags**
 
 | Parameter | Description |
@@ -153,9 +158,9 @@ The first term in the equation above is the ergodic metric, which computes the d
 with the map ($\phi_k$) and the trajectory ($c_k(\xi)$, where $\xi$ is the trajectory). The Fourier components are defined based on a set of frequencies $\omega$ indexed by a 2D index $k$, either provided via ```fourier_freqs``` to the planner and loss classes or set to integers between 0 and ```args.num_freqs```. The $\Lambda$ 
 values are weights associated with each frequency, either provided via ```freq_wts``` or defined as $\Lambda_k = \frac{1}{(1+||k||^2)^s}$ where $s = 2$ based on practical performance of the algorithm.
 
-The discrete Fourier components are computed using Fourier basis functions $F_k(\mathbb{x}) = \frac{1}{h_k}cos(\omega_k \pi \mathbb{x}_1)cos(\omega_k \pi \mathbb{x}_2)$ as
+The discrete Fourier components are computed using Fourier basis functions $F_k(\mathbf{x}) = \frac{1}{h_k}cos(\omega_k \pi \mathbf{x}_1)cos(\omega_k \pi \mathbf{x}_2)$ as
 
-$$\phi_k = \sum_X \phi(\mathbb{x})F_k(\mathbb{x})$$
+$$\phi_k = \sum_X \phi(\mathbf{x})F_k(\mathbf{x})$$
 
 $$c_k = \frac{1}{T} \sum_t F_k(\xi(t))$$
 
@@ -242,6 +247,13 @@ A differential drive dynamics class (```DiffDrive```) is provided in ```ergodic_
 Separate dynamics modules can be provided to the planner on initialization via the ```dyn_model``` parameter. User-defined
 dynamics modules should be implemented as a PyTorch module with a ```forward``` method. This method should compute a trajectory based on the controls stored in this module, which are the parameters being optimized by PyTorch.
 
+
+## Troubleshooting Tips
+
+**The algorithm isn't producing good results when I don't use an endpoint**
+
+You likely need to increase the number of iterations used to optimize the trajectory, potentially paired with a decrease in the learning rate, though we suggest the former as the initial approach.
+Using an endpoint provides additional constraints on the potential values the trajectory steps can take, which in practice results in easier optimization of the trajectory.
 
 ## References
 
