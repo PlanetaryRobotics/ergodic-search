@@ -114,7 +114,7 @@ class ErgLoss(torch.nn.Module):
             self.lambdak = self.freq_wts
 
         # state variables corresponding to pdf grid
-        X, Y = torch.meshgrid(*[torch.linspace(0, 1, self.args.num_pixels, dtype=torch.float64)]*2, indexing='ij')
+        X, Y = torch.meshgrid(*[torch.linspace(0, 1, self.args.num_pixels, dtype=torch.float64)]*2, indexing='xy')
         self.s = torch.stack([X.ravel(), Y.ravel()], dim=1)
 
         # vmap function for computing fourier coefficients efficiently (hopefully)

@@ -2,6 +2,7 @@
 # class for performing ergodic trajectory optimization
 # given a spatial distribution and starting location
 
+import os
 import argparse
 import torch
 import matplotlib.pyplot as plt
@@ -28,8 +29,14 @@ def ErgArgs():
     parser.add_argument('--bound_wt', type=float, default=1000, help='Weight on boundary condition in loss function')
     parser.add_argument('--end_pose_wt', type=float, default=0.5, help='Weight on end position in loss function')
     parser.add_argument('--debug', action='store_true', help='Whether to print loss components for debugging')
+    parser.add_argument('--outpath', type=str, help='File path to save images to, None displays them in a window', default=None)
     args = parser.parse_args()
     print(args)
+
+    # check if outpath exists and make it if not
+    if args.outpath is not None and os.path.exists(args.outpath) == False:
+        os.mkdir(args.outpath)
+
     return args
 
 # ergodic planner
@@ -83,12 +90,32 @@ class ErgPlanner():
         self.freq_wts = freq_wts
         self.loss.update_pdf(self.pdf, self.fourier_freqs, self.freq_wts)
 
+
     # update the controls given a new set
     def update_controls(self, controls):
         if not isinstance(controls, torch.Tensor):
-            controls = torch.tensor(controls, requires_grad=True)
+            controls = torch.tensor(controls)
         self.controls = controls
-        self.controls.requires_grad = True
+
+
+    # "take a step"
+    # update the controls and trajectory in the planner to start at next point
+    # final control is initialized to 0s
+    def increment_traj(self):
+
+        # define new controls
+        new_controls = torch.vstack((self.controls[1:], torch.zeros((1,2))))
+        self.update_controls(new_controls)
+
+        # update the trajectory
+        with torch.no_grad():
+            self.start_pose = self.traj[0,:]
+            self.loss.dyn_model.start_pose = self.traj[0,:]
+            self.traj = self.loss.dyn_model.forward(self.controls)
+        
+        self.start_pose.requires_grad = True
+        self.loss.dyn_model.start_pose.requires_grad = True
+
 
     # compute ergodic trajectory over spatial distribution
     def compute_traj(self, debug=False):
@@ -113,16 +140,17 @@ class ErgPlanner():
 
         # final controls and trajectory
         with torch.no_grad():
-            self.controls = self.controls.detach()
-            self.traj = self.loss.dyn_model.forward(self.controls)
+            self.controls = self.controls
+            self.traj = self.loss.dyn_model.forward(self.controls.detach())
 
         print("[INFO] Final ergodic metric is {:4.4f}".format(erg))
 
         # return controls, trajectory, and final ergodic metric
         return self.controls, self.traj, erg
 
+
     # visualize the output
-    def visualize(self):
+    def visualize(self, img_name='results'):
 
         plt.rcParams['figure.figsize'] = [10,15]
 
@@ -143,14 +171,17 @@ class ErgPlanner():
         ax[1,0].scatter(traj_np[:,0], traj_np[:,1], c='r', s=2)
 
         # reconstructed map from trajectory stats
-        ax[1,1].imshow(traj_recon.T, extent=[0,1,0,1], origin='lower')
+        ax[1,1].imshow(traj_recon, extent=[0,1,0,1], origin='lower')
         ax[1,1].set_title('Reconstructed Map from Traj Stats')
         ax[1,1].scatter(traj_np[:,0], traj_np[:,1], c='r', s=2)
 
         # error between traj stats and map stats
-        ax[0,1].imshow(map_recon - traj_recon.T, extent=[0,1,0,1], origin='lower')
+        ax[0,1].imshow(map_recon - traj_recon, extent=[0,1,0,1], origin='lower')
         ax[0,1].set_title('Reconstruction Difference (Map - Traj)')
         ax[0,1].scatter(traj_np[:,0], traj_np[:,1], c='r', s=2)
 
-        plt.show()
+        if self.args.outpath is not None:
+            plt.savefig(self.args.outpath+'/'+img_name+'.png', dpi=100, bbox_inches='tight')
+        else:
+            plt.show()
         plt.close()
