@@ -11,8 +11,7 @@ from ergodic_search import erg_planner
 from ergodic_search.dynamics import DiffDrive
 
 # map settings
-# LOCS = [[0.2, 0.8], [0.8, 0.2]]
-LOCS = [[0.5, 0.5], [0.8, 0.2]]
+LOCS = [[0.2, 0.8], [0.8, 0.2]]
 STDS = [0.01, 0.01]
 WTS = [1, 1]
 
@@ -82,15 +81,15 @@ if __name__ == "__main__":
     planner = erg_planner.ErgPlanner(args, map, init_controls=init_controls, dyn_model=diff_drive)
 
     # now loop through and update / re-plan after each step in the trajectory
-    for i in range(args.traj_steps):
+    for i in range(12):
 
-        print("On step " + str(i) + " / " + str(args.traj_steps))
+        print("On step " + str(i) + " / 11")
 
         # plan a trajectory
         traj = planner.compute_traj(debug=args.debug)
 
         # change the map by shifting one of the densities and update the planner
-        LOCS[0][0] += 0.05
+        LOCS[0][1] -= 0.05
         new_map = create_map(args.num_pixels)
         planner.update_pdf(new_map)
 
