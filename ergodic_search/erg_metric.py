@@ -99,7 +99,7 @@ class ErgLoss(torch.nn.Module):
 
         # define frequencies to use if none have been provided
         if self.fourier_freqs is None:
-            k1, k2 = torch.meshgrid(*[torch.arange(0, self.args.num_freqs, dtype=torch.float64)]*2)
+            k1, k2 = torch.meshgrid(*[torch.arange(0, self.args.num_freqs, dtype=torch.float64)]*2, indexing='ij')
             k = torch.stack([k1.ravel(), k2.ravel()], dim=1)
             self.k = torch.pi * k
         else:
@@ -114,7 +114,7 @@ class ErgLoss(torch.nn.Module):
             self.lambdak = self.freq_wts
 
         # state variables corresponding to pdf grid
-        X, Y = torch.meshgrid(*[torch.linspace(0, 1, self.args.num_pixels, dtype=torch.float64)]*2) # torch creates these opposite to how numpy does it
+        X, Y = torch.meshgrid(*[torch.linspace(0, 1, self.args.num_pixels, dtype=torch.float64)]*2, indexing='ij')
         self.s = torch.stack([X.ravel(), Y.ravel()], dim=1)
 
         # vmap function for computing fourier coefficients efficiently (hopefully)
