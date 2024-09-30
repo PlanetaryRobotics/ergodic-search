@@ -78,6 +78,10 @@ use with the new map when computing the ergodic metric. These parameters both de
 Updates the stored controls. This method requires a new set of controls to be provided via the ```controls``` parameter and 
 does not return any values.
 
+##### ```increment_traj```
+
+''Takes a step'' in the trajectory by incrementing the controls by one and re-computing the trajectory from the controls. Final controls are initialized to all 0s. This function makes use of the ```update_controls``` function and does not take any parameters nor return any values.
+
 ##### ```compute_traj```
 
 Performs the trajectory optimization using ergodic search based on the stored controls, map, and dynamics module. This method
@@ -139,6 +143,12 @@ end position in the arguments but this end position is ignored and can be safely
 | ----- | ----- |
 | ```gpu``` | Use the GPU instead of CPU |
 | ```debug``` | Print loss components for debugging |
+
+**Other Parameters**
+
+| Parameter | Description |
+| ----- | ----- |
+| ```outpath``` | File path for saving visualizations, defaults to None and displays visuals in a window |
 
 
 ### The ErgLoss Class
@@ -245,7 +255,7 @@ class can be used in practice.
 
 A differential drive dynamics class (```DiffDrive```) is provided in ```ergodic_search.dynamics``` and is used for both examples.
 Separate dynamics modules can be provided to the planner on initialization via the ```dyn_model``` parameter. User-defined
-dynamics modules should be implemented as a PyTorch module with a ```forward``` method. This method should compute a trajectory based on the controls stored in this module, which are the parameters being optimized by PyTorch.
+dynamics modules should be implemented as a PyTorch module with a ```forward``` method. This method should compute a trajectory based on the controls and starting position stored in this module, which are the parameters being optimized by PyTorch. Note that the trajectory __should not__ include the starting position as the first point and should have the same number of steps as the controls.
 
 
 ## Troubleshooting Tips
