@@ -8,6 +8,8 @@ class DiffDrive(torch.nn.Module):
 
     # Initialize the module
     def __init__(self, start_pose, traj_steps):
+
+        super().__init__()
         
         if not isinstance(start_pose, torch.Tensor):
             start_pose = torch.tensor(start_pose, requires_grad=True)

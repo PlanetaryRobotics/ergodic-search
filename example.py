@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # example use of ergodic trajectory planner
 
+import time
 import torch
 import numpy as np
 from scipy.stats import multivariate_normal as norm
@@ -76,7 +77,10 @@ if __name__ == "__main__":
     planner = erg_planner.ErgPlanner(args, map_ex, init_controls=init_controls, dyn_model=diff_drive)
 
     # generate a trajectory
+    start = time.time()
     traj = planner.compute_traj(debug=args.debug)
+    end = time.time()
+    print("Execution time in secs: ", (end-start))
 
     # visualize map and trajectory
     planner.visualize()

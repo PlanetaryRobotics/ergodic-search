@@ -51,6 +51,9 @@ class ErgPlanner():
         self.fourier_freqs = fourier_freqs
         self.freq_wts = freq_wts
 
+        # get device
+        dev = torch.device("cuda") if args.gpu else torch.device("cpu")
+
         # convert starting and ending positions to tensors
         self.start_pose = torch.tensor(self.args.start_pose, requires_grad=True)
         self.end_pose = torch.tensor(self.args.end_pose, requires_grad=True)
@@ -64,6 +67,7 @@ class ErgPlanner():
         else:
             print("Using DiffDrive dynamics model")
             self.dyn_model = DiffDrive(self.start_pose, self.args.traj_steps)
+        self.dyn_model.to(dev)
 
         # initialize parameters (controls) for module
         if init_controls is None:
@@ -77,9 +81,11 @@ class ErgPlanner():
             if not isinstance(init_controls, torch.Tensor):
                 init_controls = torch.tensor(init_controls, requires_grad=True)
             self.controls = init_controls
+        self.controls.to(dev)
 
         self.optimizer = torch.optim.Adam([self.controls], lr=self.args.learn_rate)
-        self.loss = erg_metric.ErgLoss(self.args, dyn_model, self.pdf, fourier_freqs, freq_wts)
+        self.loss = erg_metric.ErgLoss(self.args, self.dyn_model, self.pdf, fourier_freqs, freq_wts)
+        self.loss.to(dev)
 
 
     # update the spatial distribution and store it in the loss computation module

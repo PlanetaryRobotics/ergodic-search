@@ -85,12 +85,23 @@ class ErgLoss(torch.nn.Module):
 
     # Update the stored map
     def update_pdf(self, pdf, fourier_freqs=None, freq_wts=None):
+        dev = torch.device("cuda") if self.args.gpu else torch.device("cpu")
         if len(pdf.shape) > 1:
             pdf = pdf.flatten()
         self.pdf = pdf
-        if fourier_freqs is not None: self.fourier_freqs = fourier_freqs
-        if freq_wts is not None: self.freq_wts = freq_wts
+        
+        if fourier_freqs is not None:
+            self.fourier_freqs = fourier_freqs
+            self.fourier_freqs.to(dev)
+        
+        if freq_wts is not None:
+            self.freq_wts = freq_wts
+            self.freq_wts.to(dev)
+
         self.set_up_calcs()
+        # self.pdf.to(dev)
+
+        print(self.k.device)
 
     # set up calculations related to pdf
     # TODO: adjust so we can also use a 3d state space
