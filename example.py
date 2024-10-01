@@ -17,7 +17,7 @@ WTS = [1, 1]
 # create example map with a few gaussian densities in it
 def create_map(dim):
     # set up map and underlying grid
-    map = np.zeros((dim, dim))
+    map_ex = np.zeros((dim, dim))
     res = 1 / dim
     xgrid, ygrid = np.mgrid[0:1:res, 0:1:res]
     map_grid = np.dstack((xgrid, ygrid))
@@ -26,12 +26,12 @@ def create_map(dim):
     for i in range(len(LOCS)):
         dist = norm(LOCS[i], STDS[i])
         vals = dist.pdf(map_grid)
-        map += WTS[i] * vals
+        map_ex += WTS[i] * vals
 
     # normalize the map
-    map = (map - np.min(map)) / (np.max(map) - np.min(map))
+    map_ex = (map_ex - np.min(map_ex)) / (np.max(map_ex) - np.min(map_ex))
 
-    return map
+    return map_ex
 
 
 # call main function
@@ -69,11 +69,11 @@ if __name__ == "__main__":
     # print(init_controls)
 
     # create example map
-    map = create_map(args.num_pixels)
+    map_ex = create_map(args.num_pixels)
 
     # initialize planner
     init_controls.requires_grad = True
-    planner = erg_planner.ErgPlanner(args, map, init_controls=init_controls, dyn_model=diff_drive)
+    planner = erg_planner.ErgPlanner(args, map_ex, init_controls=init_controls, dyn_model=diff_drive)
 
     # generate a trajectory
     traj = planner.compute_traj(debug=args.debug)

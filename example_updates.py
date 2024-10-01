@@ -74,11 +74,11 @@ if __name__ == "__main__":
     # print(init_controls)
 
     # create example map
-    map = create_map(args.num_pixels)
+    map_ex = create_map(args.num_pixels)
     
     # initialize the planner
     init_controls.requires_grad = True
-    planner = erg_planner.ErgPlanner(args, map, init_controls=init_controls, dyn_model=diff_drive)
+    planner = erg_planner.ErgPlanner(args, map_ex, init_controls=init_controls, dyn_model=diff_drive)
 
     # now loop through and update / re-plan after each step in the trajectory
     for i in range(12):
@@ -95,6 +95,3 @@ if __name__ == "__main__":
 
         # visualize map and trajectory
         planner.visualize(img_name='iter'+str(i))
-
-        # "take a step" so we start at the next point
-        # planner.increment_traj()

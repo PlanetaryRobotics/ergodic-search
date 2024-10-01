@@ -91,32 +91,6 @@ class ErgPlanner():
         self.loss.update_pdf(self.pdf, self.fourier_freqs, self.freq_wts)
 
 
-    # update the controls given a new set
-    def update_controls(self, controls):
-        if not isinstance(controls, torch.Tensor):
-            controls = torch.tensor(controls)
-        self.controls = controls
-
-
-    # "take a step"
-    # update the controls and trajectory in the planner to start at next point
-    # final control is initialized to 0s
-    def increment_traj(self):
-
-        # define new controls
-        new_controls = torch.vstack((self.controls[1:], torch.zeros((1,2))))
-        self.update_controls(new_controls)
-
-        # update the trajectory
-        with torch.no_grad():
-            self.start_pose = self.traj[0,:]
-            self.loss.dyn_model.start_pose = self.traj[0,:]
-            self.traj = self.loss.dyn_model.forward(self.controls)
-        
-        self.start_pose.requires_grad = True
-        self.loss.dyn_model.start_pose.requires_grad = True
-
-
     # compute ergodic trajectory over spatial distribution
     def compute_traj(self, debug=False):
         
@@ -134,8 +108,6 @@ class ErgPlanner():
                 break
             
             erg.backward()
-            
-            # print(erg.grad)
             self.optimizer.step()
 
         # final controls and trajectory
