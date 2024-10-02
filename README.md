@@ -251,9 +251,9 @@ class can be used in practice.
 
 ### Incorporating Dynamics Models
 
-A differential drive dynamics class (```DiffDrive```) is provided in ```ergodic_search.dynamics``` and is used for both examples.
-Separate dynamics modules can be provided to the planner on initialization via the ```dyn_model``` parameter. User-defined
-dynamics modules should be implemented using the ```DynModule``` base class (also defined in ```ergodic_search.dynamics```). The only requirement for these modules is that they contain a ```forward``` method that computes a trajectory based on the provided starting position and internally-stored controls (defined as ```self.controls``` in ```DynModule``` and registered as a PyTorch parameter). Note that the trajectory __should not__ include the starting position as the first point and should have the same number of steps as the controls.
+A differential drive dynamics class (```ergodic_search.dynamics.DiffDrive```) is provided in the code, but user-defined dynamics modules can also be used. These should be derived from the ```DynModule``` base class defined in ```ergodic_search.dynamics``` and only require definition of a forward method that uses ```self.controls``` to compute a trajectory. Note that the trajectory __should not__ include the starting position as the first point and should have the same number of steps as the controls.
+
+User-defined dynamics modules can be provided to the planner on initialization via the ```dyn_model``` parameter. Both examples rely on the included differential drive class.
 
 
 ## Troubleshooting Tips
