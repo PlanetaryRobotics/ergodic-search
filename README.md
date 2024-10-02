@@ -272,7 +272,6 @@ Using an endpoint provides additional constraints on the potential values the tr
 
 <a name="1"></a>[1] G. Mathew and I. Mezić, "Metrics for ergodicity and design of ergodic dynamics for multi-agent systems," Physica D: Nonlinear Phenomena, vol. 240, no. 4-5, pp. 432-442, Feb. 2011, doi: [10.1016/j.physd.2010.10.010](https://www.sciencedirect.com/science/article/pii/S016727891000285X).
 
-
 <a name="2"></a>[2] Z. Ren et al., "A Local Optimization Framework for Multi-Objective Ergodic Search," Proceedings of Robotics: Science and Systems, New York City, NY, USA, June 2022. Code available in the [rap-lab-org/public_moes](https://github.com/rap-lab-org/public_moes) repository.
 
-<a name="3"></a>[3] [TO ADD]
+<a name="3"></a>[3] L. Dressel and M. Kochenderfer, "On the Optimality of Ergodic Trajectories for Information Gathering Tasks," Proceedings of the 2018 Annual American Control Conference (ACC), Milwaukee, WI, USA, Jun 2018, doi: [10.23919/ACC.2018.8430857](https://ieeexplore.ieee.org/document/8430857/).
