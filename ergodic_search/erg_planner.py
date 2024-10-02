@@ -39,6 +39,7 @@ def ErgArgs():
 
     return args
 
+
 # ergodic planner
 class ErgPlanner():
 
@@ -55,37 +56,35 @@ class ErgPlanner():
         dev = torch.device("cuda") if args.gpu else torch.device("cpu")
 
         # convert starting and ending positions to tensors
-        self.start_pose = torch.tensor(self.args.start_pose, requires_grad=True)
-        self.end_pose = torch.tensor(self.args.end_pose, requires_grad=True)
+        self.start_pose = torch.tensor(self.args.start_pose, requires_grad=True, device=dev)
+        self.end_pose = torch.tensor(self.args.end_pose, requires_grad=True, device=dev)
 
-        # set up pdf, dynamics model, and loss module
+        # flatten pdf if needed
         if pdf is not None and len(pdf.shape) > 1:
             self.pdf = pdf.flatten()
 
+        # dynamics module
+        if not isinstance(init_controls, torch.Tensor):
+            init_controls = torch.tensor(init_controls)
+        init_controls.requires_grad = True
+
         if dyn_model is not None:
+            if init_controls is not None:
+                # update initial controls in the model if not none
+                for n,p in dyn_model.state_dict().items():
+                    if n == 'controls':
+                        p.copy_(init_controls)
             self.dyn_model = dyn_model
+
         else:
             print("Using DiffDrive dynamics model")
-            self.dyn_model = DiffDrive(self.start_pose, self.args.traj_steps)
-        self.dyn_model.to(dev)
+            self.dyn_model = DiffDrive(self.start_pose, self.args.traj_steps, init_controls, device=dev)
 
-        # initialize parameters (controls) for module
-        if init_controls is None:
-            self.controls = torch.zeros((args.traj_steps, 2), requires_grad=True)
-
-        elif (init_controls.shape[0] != args.traj_steps):
-            print("[INFO] Initial controls do not have correct length, initializing to zero")
-            self.controls = torch.zeros((args.traj_steps, 2), requires_grad=True)
-
-        else:
-            if not isinstance(init_controls, torch.Tensor):
-                init_controls = torch.tensor(init_controls, requires_grad=True)
-            self.controls = init_controls
-        self.controls.to(dev)
-
-        self.optimizer = torch.optim.Adam([self.controls], lr=self.args.learn_rate)
+        # loss module
         self.loss = erg_metric.ErgLoss(self.args, self.dyn_model, self.pdf, fourier_freqs, freq_wts)
-        self.loss.to(dev)
+
+        # optimizer
+        self.optimizer = torch.optim.Adam(self.dyn_model.parameters(), lr=self.args.learn_rate)
 
 
     # update the spatial distribution and store it in the loss computation module
@@ -97,13 +96,26 @@ class ErgPlanner():
         self.loss.update_pdf(self.pdf, self.fourier_freqs, self.freq_wts)
 
 
+    # update the controls
+    def update_controls(self, new_controls):
+        # check that the new controls have the correct type
+        if not isinstance(new_controls, torch.Tensor):
+            new_controls = torch.tensor(new_controls)
+        new_controls.requires_grad = True
+
+        # update the parameter
+        for n,p in self.dyn_model.state_dict().items():
+            if n == 'controls':
+                p.copy_(new_controls)
+
+
     # compute ergodic trajectory over spatial distribution
     def compute_traj(self, debug=False):
         
         # iterate
         for i in range(self.args.iters):
             self.optimizer.zero_grad()
-            erg = self.loss(self.controls, print_flag=debug)
+            erg = self.loss(print_flag=debug)
 
             # print progress every 100th iter
             if i % 100 == 0 and not debug:
@@ -118,13 +130,13 @@ class ErgPlanner():
 
         # final controls and trajectory
         with torch.no_grad():
-            self.controls = self.controls
-            self.traj = self.loss.dyn_model.forward(self.controls.detach())
+            controls = self.dyn_model.controls.detach()
+            self.traj = self.loss.dyn_model.forward()
 
         print("[INFO] Final ergodic metric is {:4.4f}".format(erg))
 
         # return controls, trajectory, and final ergodic metric
-        return self.controls, self.traj, erg
+        return controls, self.traj, erg
 
 
     # visualize the output

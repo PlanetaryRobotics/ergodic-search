@@ -77,7 +77,6 @@ if __name__ == "__main__":
     map_ex = create_map(args.num_pixels)
     
     # initialize the planner
-    init_controls.requires_grad = True
     planner = erg_planner.ErgPlanner(args, map_ex, init_controls=init_controls, dyn_model=diff_drive)
 
     # now loop through and update / re-plan after each step in the trajectory

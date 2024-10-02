@@ -10,11 +10,14 @@ from functools import partial
 # Module for computing ergodic loss over a PDF
 class ErgLoss(torch.nn.Module):
 
-    def __init__(self, args, dyn_model, pdf=None, fourier_freqs=None, freq_wts=None):
+    def __init__(self, args, dyn_model, pdf=None, fourier_freqs=None, freq_wts=None, device="cpu"):
+        
         super(ErgLoss, self).__init__()
+        
         self.args = args
-        self.init_flag=False
-        self.end_pose = torch.tensor(self.args.end_pose, requires_grad=True)
+        self.init_flag = False
+        self.end_pose = torch.tensor(self.args.end_pose, requires_grad=True, device=device)
+        self.device=device
 
         if args.num_freqs == 0 and fourier_freqs is None:
             print("[ERROR] args.num_freqs needs to be positive or fourier_freqs must be provided. Returning with None.")
@@ -23,11 +26,14 @@ class ErgLoss(torch.nn.Module):
         if fourier_freqs is not None:
             if not isinstance(fourier_freqs, torch.Tensor):
                 fourier_freqs = torch.tensor(fourier_freqs)
-        self.fourier_freqs = fourier_freqs
+            fourier_freqs.to(device)
         
         if freq_wts is not None:
             if not isinstance(freq_wts, torch.Tensor):
                 freq_wts = torch.tensor(freq_wts)
+            fourier_freqs.to(device)
+
+        self.fourier_freqs = fourier_freqs
         self.freq_wts = freq_wts
 
         if pdf is not None:
@@ -35,6 +41,7 @@ class ErgLoss(torch.nn.Module):
                 pdf = torch.tensor(pdf)
             if len(pdf.shape) > 1:
                 pdf = pdf.flatten()
+            pdf.to(device)
             self.pdf = pdf
             self.set_up_calcs()
 
@@ -42,7 +49,7 @@ class ErgLoss(torch.nn.Module):
 
 
     # compute the ergodic metric
-    def forward(self, controls, print_flag=False):
+    def forward(self, print_flag=False):
 
         # confirm we can do this
         if not self.init_flag:
@@ -50,13 +57,13 @@ class ErgLoss(torch.nn.Module):
             return None
 
         # get the trajectory from the dynamics model
-        traj = self.dyn_model.forward(controls)
+        traj = self.dyn_model.forward()
 
         # ergodic metric
         erg_metric = torch.sum(self.lambdak * torch.square(self.phik - self.ck(traj)))
 
         # controls regularizer
-        control_metric = torch.mean(controls**2, dim=0)
+        control_metric = torch.mean(self.dyn_model.controls**2, dim=0)
 
         # boundary condition counts number of points out of bounds
         zt = torch.tensor([0])
@@ -77,9 +84,9 @@ class ErgLoss(torch.nn.Module):
         return loss
 
     # just compute the ergodic metric
-    def calc_erg_metric(self, controls):
+    def calc_erg_metric(self):
         with torch.no_grad():
-            traj = self.dyn_model.forward(controls)
+            traj = self.dyn_model.forward()
             erg = torch.sum(self.lambdak * torch.square(self.phik - self.ck(traj)))
             return erg
 
@@ -115,6 +122,7 @@ class ErgLoss(torch.nn.Module):
             self.k = torch.pi * k
         else:
             self.k = self.fourier_freqs
+        self.k.to(self.device)
 
         # weights to use
         if self.freq_wts is None:
@@ -123,10 +131,12 @@ class ErgLoss(torch.nn.Module):
             self.lambdak = (1. + torch.linalg.norm(self.k / torch.pi, dim=1)**2)**(-4./2.)
         else:
             self.lambdak = self.freq_wts
+        self.lambdak.to(self.device)
 
         # state variables corresponding to pdf grid
         X, Y = torch.meshgrid(*[torch.linspace(0, 1, self.args.num_pixels, dtype=torch.float64)]*2, indexing='xy')
         self.s = torch.stack([X.ravel(), Y.ravel()], dim=1)
+        self.s.to(self.device)
 
         # vmap function for computing fourier coefficients efficiently (hopefully)
         self.fk = lambda x, k : torch.prod(torch.cos(x*k))
@@ -136,12 +146,14 @@ class ErgLoss(torch.nn.Module):
         _hk = (2.*self.k + torch.sin(2.*self.k)) / (4.*self.k)
         _hk[torch.isnan(_hk)] = 1.
         self.hk = torch.sqrt(torch.prod(_hk, dim=1))
+        self.hk.to(self.device)
 
         # compute map stats
         fk_map = torch.vmap(self.fk_vmap, in_dims=(None, 0))(self.s, self.k)
         phik = fk_map @ self.pdf
         phik = phik / phik[0]
         self.phik = phik / self.hk
+        self.phik.to(self.device)
 
         # map stats for reconstruction
         self.map_recon = self.phik @ fk_map

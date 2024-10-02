@@ -1,49 +1,60 @@
 #!/usr/bin/env python
-# basic dynamics module for differential drive
+# basic dynamics and simple differential drive modules
 
 import torch
 
-# Dynamics model for computing trajectory given controls
-class DiffDrive(torch.nn.Module):
+# base class for dynamics modules
+# sets up parameters and converts inputs as needed
+class DynModule(torch.nn.Module):
 
-    # Initialize the module
-    def __init__(self, start_pose, traj_steps):
+    def __init__(self, start_pose, traj_steps, init_controls=None, device="cpu"):
 
-        super().__init__()
-        
+        super(DynModule, self).__init__()
+
         if not isinstance(start_pose, torch.Tensor):
             start_pose = torch.tensor(start_pose, requires_grad=True)
 
+        if init_controls is None:
+            init_controls = torch.zeros((traj_steps, 2), requires_grad=True)
+        
+        elif init_controls.shape[0] != traj_steps:
+            print("[INFO] Initial controls do not have correct length, initializing to zero")
+            init_controls = torch.zeros((traj_steps, 2), requires_grad=True)
+
+        if not isinstance(init_controls, torch.Tensor):
+            init_controls = torch.tensor(init_controls, requires_grad=True)
+
+        start_pose.to(device)
+        init_controls.to(device)
+
+        self.device=device
         self.start_pose = start_pose
         self.traj_steps = traj_steps
+        self.controls = torch.nn.Parameter(init_controls)
 
+
+# Dynamics model for computing trajectory given controls
+class DiffDrive(DynModule):
 
     # Compute the trajectory given the controls
-    def forward(self, controls):
-        if not isinstance(controls, torch.Tensor):
-            controls = torch.tensor(controls)
-
-        if controls.shape[0] != self.traj_steps:
-            print("[ERROR] Controls with incorrect length provided to forward dynamics module. Returning with None.")
-            return None
+    def forward(self):
 
         # compute theta based on propagating forward the angular velocities
-        theta = self.start_pose[2] + torch.cumsum(controls[:,1], axis=0)
+        theta = self.start_pose[2] + torch.cumsum(self.controls[:,1], axis=0)
 
         # compute x and y based on thetas and controls
-        x = self.start_pose[0] + torch.cumsum(torch.cos(theta) * torch.abs(controls[:,0]), axis=0)
-        y = self.start_pose[1] + torch.cumsum(torch.sin(theta) * torch.abs(controls[:,0]), axis=0)
+        x = self.start_pose[0] + torch.cumsum(torch.cos(theta) * torch.abs(self.controls[:,0]), axis=0)
+        y = self.start_pose[1] + torch.cumsum(torch.sin(theta) * torch.abs(self.controls[:,0]), axis=0)
 
         traj = torch.stack((x, y, theta), dim=1)
         
         return traj
     
-
     # Compute the inverse (given trajectory, compute controls)
     def inverse(self, traj):
 
         if not isinstance(traj, torch.Tensor):
-            traj = torch.tensor(traj)
+            traj = torch.tensor(traj, device=self.device)
 
         # add start point to trajectory
         traj_with_start = torch.cat((self.start_pose.unsqueeze(0), traj), axis=0)

@@ -67,13 +67,11 @@ if __name__ == "__main__":
         # this is to trick pytorch into ignoring the computation here
         # otherwise it'll complain about controls not being a leaf tensor
         init_controls = diff_drive.inverse(ref_tr_init)
-    # print(init_controls)
 
     # create example map
     map_ex = create_map(args.num_pixels)
 
     # initialize planner
-    init_controls.requires_grad = True
     planner = erg_planner.ErgPlanner(args, map_ex, init_controls=init_controls, dyn_model=diff_drive)
 
     # generate a trajectory
