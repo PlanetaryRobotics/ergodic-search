@@ -256,7 +256,11 @@ Note that this is a contrived example and does not represent how ergodic search 
 
 ### Incorporating Dynamics Models
 
-A differential drive dynamics class (```ergodic_search.dynamics.DiffDrive```) is provided in the code, but user-defined dynamics modules can also be used. These should be derived from the ```DynModule``` base class defined in ```ergodic_search.dynamics``` and only require definition of a forward method that uses ```self.controls``` to compute a trajectory. Note that the trajectory __should not__ include the starting position as the first point and should have the same number of steps as the controls.
+A differential drive dynamics class (```ergodic_search.dynamics.DiffDrive```) is provided in the code, but user-defined dynamics modules can also be used. These modules should have the following characteristics:
+
+1. Derive from the ```DynModule``` base class defined in ```ergodic_search.dynamics```.
+2. Contain a ```forward``` method that uses ```self.controls``` to compute a trajectory. Note that the trajectory __should not__ include the starting position as the first point and should have the same number of steps as the controls.
+3. Be differentiable via autodiff or provide an explicit gradient for the trajectory wrt the controls. This means using Pytorch functions like ```torch.cumsum``` instead of for loops to compute the trajectory.
 
 User-defined dynamics modules can be provided to the planner on initialization via the ```dyn_model``` parameter. All examples rely on the included differential drive class.
 
@@ -267,6 +271,10 @@ User-defined dynamics modules can be provided to the planner on initialization v
 
 You likely need to increase the number of iterations used to optimize the trajectory, potentially paired with a decrease in the learning rate, though we suggest the former as the initial approach.
 Using an endpoint provides additional constraints on the potential values the trajectory steps can take, which in practice results in easier optimization of the trajectory.
+
+**My user-defined dynamics module isn't working properly**
+
+PyTorch is likely not computing gradients for the controls correctly. Make sure you are computing the trajectory correctly in the forward method in such a manner that PyTorch can backpropagate the gradients to the controls. Viewing the model graph is a useful way of checking what autodiff uses.
 
 ## References
 
