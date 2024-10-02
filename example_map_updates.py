@@ -43,8 +43,8 @@ if __name__ == "__main__":
     args.outpath = 'results/map_updates'
     args.iters = 3000
 
-    if args.outpath is not None and os.path.exists(args.outpath) == False:
-        os.mkdir(args.outpath)
+    if args.outpath is not None:
+        os.makedirs(args.outpath, exist_ok=True)
 
     # set a more interesting starting position and initial controls
     args.start_pose = [0.2, 0.2, 0]
