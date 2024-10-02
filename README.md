@@ -24,15 +24,13 @@ optimization step.
 
 This implementation is built in Python and relies on PyTorch for optimization. The versions listed
 below are the latest versions on which the code has been tested. The code is capable of running on 
-a CPU or GPU.
-- Python >= 3.8.10
-- PyTorch >= 2.0.1
-- argparse >= 1.1
-- matplotlib >= 3.7.1
+a CPU or GPU and was tested on an NVIDIA GeForce RTX 3060 GPU.
+- Python == 3.8.10
+- PyTorch == 2.0.1+cu118
+- argparse == 1.1
+- matplotlib == 3.7.1
+- numpy == 1.24.3
 - functools
-
-If this code is being run on a GPU, CUDA must additionally be installed per the specifications for 
-the GPU and the version of PyTorch being used. The code was tested on a [GPU INFO] GPU with CUDA 12.4.
 
 ## Installation
 
@@ -75,12 +73,12 @@ use with the new map when computing the ergodic metric. These parameters both de
 
 ##### ```update_controls```
 
-Updates the stored controls. This method requires a new set of controls to be provided via the ```controls``` parameter and 
+Updates the stored controls. This method requires a new set of controls to be provided via the ```new_controls``` parameter and 
 does not return any values.
 
-##### ```increment_traj```
+##### ```take_step```
 
-''Takes a step'' in the trajectory by incrementing the controls by one and re-computing the trajectory from the controls. Final controls are initialized to all 0s. This function makes use of the ```update_controls``` function and does not take any parameters nor return any values.
+''Takes a step'' in the trajectory by setting the new start point to the first point in the current trajectory and incrementing the controls by one. Final controls are initialized to be the same as the second to last set of controls. This function makes use of the ```update_controls``` function and does not take any parameters nor return any values.
 
 ##### ```compute_traj```
 
@@ -91,9 +89,9 @@ the final loss metric.
 ##### ```visualize```
 
 Displays the results from performing ergodic search. The results for the examples shown below are created using this method.
-The top left displays the original map, the bottom left displays the map reconstruction from the map statistics, the bottom right
-displays the map reconstruction from the trajectory statistics, and the top right displays the difference between the 
-reconstructions (bottom left - bottom right). All maps also display the planned trajectory. This method takes no arguments and 
+The top left displays the original map, the bottom left displays the map reconstruction from the Fourier basis function terms for the map, the bottom right
+displays the map reconstruction from the Fourier basis function terms for the trajectory, and the top right displays the difference between the 
+reconstructions (bottom left - bottom right). All maps also display the planned trajectory in red. If steps have been taken, the previous trajectory will be shown in black. This method takes no arguments and 
 does not return any values.
 
 
@@ -255,7 +253,7 @@ class can be used in practice.
 
 A differential drive dynamics class (```DiffDrive```) is provided in ```ergodic_search.dynamics``` and is used for both examples.
 Separate dynamics modules can be provided to the planner on initialization via the ```dyn_model``` parameter. User-defined
-dynamics modules should be implemented as a PyTorch module with a ```forward``` method. This method should compute a trajectory based on the controls and starting position stored in this module, which are the parameters being optimized by PyTorch. Note that the trajectory __should not__ include the starting position as the first point and should have the same number of steps as the controls.
+dynamics modules should be implemented using the ```DynModule``` base class (also defined in ```ergodic_search.dynamics```). The only requirement for these modules is that they contain a ```forward``` method that computes a trajectory based on the provided starting position and internally-stored controls (defined as ```self.controls``` in ```DynModule``` and registered as a PyTorch parameter). Note that the trajectory __should not__ include the starting position as the first point and should have the same number of steps as the controls.
 
 
 ## Troubleshooting Tips
