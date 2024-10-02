@@ -45,7 +45,7 @@ Then the package can be locally installed with ```pip install -e .```
 ## Usage
 
 This section provides more details on how this repository can be used to perform ergodic search on 
-custom maps with various parameter settings. Two example scripts are provided in the top level directory. 
+custom maps with various parameter settings. Three example scripts are provided in the top level directory. 
 
 ### The ErgPlanner Class
 
@@ -93,6 +93,8 @@ The top left displays the original map, the bottom left displays the map reconst
 displays the map reconstruction from the Fourier basis function terms for the trajectory, and the top right displays the difference between the 
 reconstructions (bottom left - bottom right). All maps also display the planned trajectory in red. If steps have been taken, the previous trajectory will be shown in black. This method takes no arguments and 
 does not return any values.
+
+The colormap can be changed with the ```cmap``` parameter and defaults to `viridis`. The image is stored if ```args.outpath``` is not none with the name provided with the ```img_name``` parameter (which defaults to `results`).
 
 
 #### Command Line Arguments
@@ -233,27 +235,30 @@ The map reconstruction is returned as a flat array that can be reshaped to the o
 
 ### Examples
 
+Three example scripts are included in the top-level directory of the repository. Reviewing these scripts can help see how the ```ErgPlanner``` class can be used in practice.
+
 The first script, ```example.py```, provides a simple example of 
 ergodic search on a map with two , using the default differential drive dynamics module. Running
 ```python3 example.py``` should produce the following visualization:
 
 ![Static Example](images/example.png)
 
-The second script, ```example_updates.py```, provides a simple example in which the map is updated after each step of the planner.
-The trajectory is then re-planned. This script can be used to see how the map and controls updates work. The initial results should look identical to the first example; the results after 5 and 10 updates are shown below:
+The second script, ```example_map_updates.py```, provides a simple example in which the map is updated several times and the trajectory is re-planned accordingly. This script can be used to see how the map updates work. The results should evolve as shown in the gif below:
 
-[ADD IMAGE]
+![Map Update Example](images/example_map_updates.gif)
 
-An example script is included in ```example.py``` for reference. This script enables the user to 
-adjust parameters but uses the same underlying map. Reviewing the script can help see how the ```ErgPlanner```
-class can be used in practice.
+The third script, ```example_replanning.py```, provides an example in which the trajectory is re-planned after taking a step and can be used to see how the control updates and ```take_step``` work. The gif below shows the results from this example:
+
+![Replanning Example](images/example_replan.gif)
+
+Note that this is a contrived example and does not represent how ergodic search should be used in practice (e.g. the information at each point is not changing as information is gathered). For more information, see [[3]](#3).
 
 
 ### Incorporating Dynamics Models
 
 A differential drive dynamics class (```ergodic_search.dynamics.DiffDrive```) is provided in the code, but user-defined dynamics modules can also be used. These should be derived from the ```DynModule``` base class defined in ```ergodic_search.dynamics``` and only require definition of a forward method that uses ```self.controls``` to compute a trajectory. Note that the trajectory __should not__ include the starting position as the first point and should have the same number of steps as the controls.
 
-User-defined dynamics modules can be provided to the planner on initialization via the ```dyn_model``` parameter. Both examples rely on the included differential drive class.
+User-defined dynamics modules can be provided to the planner on initialization via the ```dyn_model``` parameter. All examples rely on the included differential drive class.
 
 
 ## Troubleshooting Tips
@@ -269,3 +274,5 @@ Using an endpoint provides additional constraints on the potential values the tr
 
 
 <a name="2"></a>[2] Z. Ren et al., "A Local Optimization Framework for Multi-Objective Ergodic Search," Proceedings of Robotics: Science and Systems, New York City, NY, USA, June 2022. Code available in the [rap-lab-org/public_moes](https://github.com/rap-lab-org/public_moes) repository.
+
+<a name="3"></a>[3] [TO ADD]

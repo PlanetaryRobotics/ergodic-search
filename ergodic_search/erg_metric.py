@@ -108,8 +108,6 @@ class ErgLoss(torch.nn.Module):
         self.set_up_calcs()
         # self.pdf.to(dev)
 
-        print(self.k.device)
-
     # set up calculations related to pdf
     # TODO: adjust so we can also use a 3d state space
     # for this will need 3d frequencies, X, and Y, and d = 4 instead of 3 for lambda exponent

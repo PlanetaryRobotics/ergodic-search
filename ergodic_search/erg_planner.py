@@ -172,7 +172,7 @@ class ErgPlanner():
 
 
     # visualize the output
-    def visualize(self, img_name='results'):
+    def visualize(self, img_name='results', cmap='viridis'):
 
         plt.rcParams['figure.figsize'] = [10,15]
 
@@ -186,22 +186,22 @@ class ErgPlanner():
         _, ax = plt.subplots(2,2)
 
         # original map with trajectory
-        ax[0,0].imshow(self.pdf.reshape((self.args.num_pixels, self.args.num_pixels)), extent=[0,1,0,1], origin='lower')
+        ax[0,0].imshow(self.pdf.reshape((self.args.num_pixels, self.args.num_pixels)), extent=[0,1,0,1], origin='lower', cmap=cmap)
         ax[0,0].set_title('Original Map and Trajectory')
         ax[0,0].scatter(traj_np[:,0], traj_np[:,1], c='r', s=2)
 
         # reconstructed map from map stats
-        ax[1,0].imshow(map_recon, extent=[0,1,0,1], origin='lower')
+        ax[1,0].imshow(map_recon, extent=[0,1,0,1], origin='lower', cmap=cmap)
         ax[1,0].set_title('Reconstructed Map from Map Stats')
         ax[1,0].scatter(traj_np[:,0], traj_np[:,1], c='r', s=2)
 
         # error between traj stats and map stats
-        ax[0,1].imshow(map_recon - traj_recon, extent=[0,1,0,1], origin='lower')
+        ax[0,1].imshow(map_recon - traj_recon, extent=[0,1,0,1], origin='lower', cmap=cmap)
         ax[0,1].set_title('Reconstruction Difference (Map - Traj)')
         ax[0,1].scatter(traj_np[:,0], traj_np[:,1], c='r', s=2)
 
         # reconstructed map from trajectory stats
-        ax[1,1].imshow(traj_recon, extent=[0,1,0,1], origin='lower')
+        ax[1,1].imshow(traj_recon, extent=[0,1,0,1], origin='lower', cmap=cmap)
         ax[1,1].set_title('Reconstructed Map from Traj Stats')
         ax[1,1].scatter(traj_np[:,0], traj_np[:,1], c='r', s=2)
 

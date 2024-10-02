@@ -40,7 +40,7 @@ if __name__ == "__main__":
 
     # parse arguments
     args = erg_planner.ErgArgs()
-    args.outpath = 'results'
+    args.outpath = 'results/map_updates'
     args.iters = 3000
 
     if args.outpath is not None and os.path.exists(args.outpath) == False:
@@ -89,14 +89,10 @@ if __name__ == "__main__":
         traj = planner.compute_traj(debug=args.debug)
 
         # change the map by shifting one of the densities and update the planner
-        LOCS[0][1] -= 0.05
+        LOCS[1][1] += 0.05
         new_map = create_map(args.num_pixels)
         planner.update_pdf(new_map)
 
         # visualize map and trajectory
         planner.visualize(img_name='iter'+str(i))
-
-        # "take a step" along the trajectory
-        # this will increment the controls such that the planner will start at the first point in the trajectory and 
-        planner.take_step()
 
