@@ -18,7 +18,7 @@ WTS = [1, 1]
 # create example map with a few gaussian densities in it
 def create_map(dim):
     # set up map and underlying grid
-    map = np.zeros((dim, dim))
+    map_ex = np.zeros((dim, dim))
     res = 1 / dim
     xgrid, ygrid = np.mgrid[0:1:res, 0:1:res]
     map_grid = np.dstack((xgrid, ygrid))
@@ -27,12 +27,12 @@ def create_map(dim):
     for i in range(len(LOCS)):
         dist = norm(LOCS[i], STDS[i])
         vals = dist.pdf(map_grid)
-        map += WTS[i] * vals
+        map_ex += WTS[i] * vals
 
     # normalize the map
-    map = (map - np.min(map)) / (np.max(map) - np.min(map))
+    map_ex = (map_ex - np.min(map_ex)) / (np.max(map_ex) - np.min(map_ex))
 
-    return map
+    return map_ex
 
 
 # call main function
@@ -41,8 +41,9 @@ if __name__ == "__main__":
     # parse arguments
     args = erg_planner.ErgArgs()
     args.outpath = 'results'
+    args.iters = 3000
 
-    if os.path.exists(args.outpath) == False:
+    if args.outpath is not None and os.path.exists(args.outpath) == False:
         os.mkdir(args.outpath)
 
     # set a more interesting starting position and initial controls
@@ -94,3 +95,8 @@ if __name__ == "__main__":
 
         # visualize map and trajectory
         planner.visualize(img_name='iter'+str(i))
+
+        # "take a step" along the trajectory
+        # this will increment the controls such that the planner will start at the first point in the trajectory and 
+        planner.take_step()
+
