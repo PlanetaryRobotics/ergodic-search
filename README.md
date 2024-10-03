@@ -276,6 +276,10 @@ Using an endpoint provides additional constraints on the potential values the tr
 
 PyTorch is likely not computing gradients for the controls correctly. Make sure you are computing the trajectory correctly in the forward method in such a manner that PyTorch can backpropagate the gradients to the controls. Viewing the model graph is a useful way of checking what autodiff uses.
 
+**The controls aren't changing and the ergodic metric isn't decreasing during optimization**
+
+Provide an initial set of controls that isn't all zeros. With an all-zero set of controls, PyTorch cannot compute gradients correctly and will not be able to optimize. The initial set of controls can be as simple as a constant translational velocity with no angular velocity.
+
 ## References
 
 <a name="1"></a>[1] G. Mathew and I. Mezić, "Metrics for ergodicity and design of ergodic dynamics for multi-agent systems," Physica D: Nonlinear Phenomena, vol. 240, no. 4-5, pp. 432-442, Feb. 2011, doi: [10.1016/j.physd.2010.10.010](https://www.sciencedirect.com/science/article/pii/S016727891000285X).
