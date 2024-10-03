@@ -274,7 +274,16 @@ Using an endpoint provides additional constraints on the potential values the tr
 
 **My user-defined dynamics module isn't working properly**
 
-PyTorch is likely not computing gradients for the controls correctly. Make sure you are computing the trajectory correctly in the forward method in such a manner that PyTorch can backpropagate the gradients to the controls. Viewing the model graph is a useful way of checking what autodiff uses.
+PyTorch is likely not computing gradients for the controls correctly. Make sure you are computing the trajectory correctly in the forward method in such a manner that PyTorch can backpropagate the gradients to the controls. Viewing the model graph is a useful way of checking these computations and can be done with, for example, the ```torchviz``` package as follows:
+
+```
+from torchviz import make_dot
+...
+dot = make_dot(model(x), params=dict(model.named_parameters()))
+dot.render("model_visualization", format="pdf")
+```
+
+More information on ```torchviz``` can be found [here](https://github.com/szagoruyko/pytorchviz).
 
 **The controls aren't changing and the ergodic metric isn't decreasing during optimization**
 
