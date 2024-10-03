@@ -174,8 +174,6 @@ class ErgPlanner():
     # visualize the output
     def visualize(self, img_name='results', cmap='viridis'):
 
-        plt.rcParams['figure.figsize'] = [10,15]
-
         with torch.no_grad():
             traj = self.dyn_model.forward().detach()
 
@@ -183,7 +181,9 @@ class ErgPlanner():
         traj_recon = self.loss.traj_recon(traj).reshape((self.args.num_pixels, self.args.num_pixels))
         map_recon = self.loss.map_recon.detach().reshape((self.args.num_pixels, self.args.num_pixels))
 
-        _, ax = plt.subplots(2,2)
+        fig, ax = plt.subplots(2,2)
+
+        fig.set_size_inches(10, 10)
 
         # original map with trajectory
         ax[0,0].imshow(self.pdf.reshape((self.args.num_pixels, self.args.num_pixels)), extent=[0,1,0,1], origin='lower', cmap=cmap)
