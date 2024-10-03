@@ -278,7 +278,8 @@ PyTorch is likely not computing gradients for the controls correctly. Make sure 
 
 ```
 from torchviz import make_dot
-...
+
+model = ErgPlanner(...)
 dot = make_dot(model(x), params=dict(model.named_parameters()))
 dot.render("model_visualization", format="pdf")
 ```
