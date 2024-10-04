@@ -57,8 +57,6 @@ class ErgPlanner():
         # store information
         self.args = args
         self.pdf = pdf
-        self.fourier_freqs = fourier_freqs
-        self.freq_wts = freq_wts
 
         # get device
         self.device = torch.device("cuda") if args.gpu else torch.device("cpu")
@@ -116,8 +114,6 @@ class ErgPlanner():
     def update_pdf(self, pdf, fourier_freqs=None, freq_wts=None):
         if len(pdf.shape) > 1:
             self.pdf = pdf.flatten()
-        self.fourier_freqs = fourier_freqs
-        self.freq_wts = freq_wts
         self.loss.update_pdf(self.pdf, self.fourier_freqs, self.freq_wts)
 
 
