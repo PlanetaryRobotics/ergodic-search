@@ -8,6 +8,8 @@ import copy
 import torch
 import matplotlib.pyplot as plt
 
+from torch.optim import lr_scheduler
+
 from ergodic_search import erg_metric
 from ergodic_search.dynamics import DiffDrive
 
@@ -15,7 +17,7 @@ from ergodic_search.dynamics import DiffDrive
 # parameters that can be changed
 def ErgArgs():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--learn_rate', type=float, default=0.001, help='Learning rate for optimizer')
+    parser.add_argument('--learn_rate', type=float, nargs='+', default=[0.001], help='Learning rate for optimizer')
     parser.add_argument('--num_pixels', type=int, default=500, help='Number of pixels along one side of the map')
     parser.add_argument('--gpu', action='store_true', help='Flag for using the GPU instead of CPU')
     parser.add_argument('--traj_steps', type=int, default=100, help='Number of steps in trajectory')
@@ -47,6 +49,11 @@ class ErgPlanner():
     # initialize planner
     def __init__(self, args, pdf=None, init_controls=None, dyn_model=None, fourier_freqs=None, freq_wts=None):
         
+        # check learning rate args
+        if len(args.learn_rate) > 3:
+            print("Too many values provided to args.learn_rate, using first 3 with linear LR scheduler")
+            args.learn_rate = args.learn_rate[0:3]
+
         # store information
         self.args = args
         self.pdf = pdf
@@ -85,7 +92,18 @@ class ErgPlanner():
         self.loss = erg_metric.ErgLoss(self.args, self.dyn_model, self.pdf, fourier_freqs, freq_wts)
 
         # optimizer
-        self.optimizer = torch.optim.Adam(self.dyn_model.parameters(), lr=self.args.learn_rate)
+        self.optimizer = torch.optim.Adam(self.dyn_model.parameters(), lr=self.args.learn_rate[0])
+
+        # set up learning rate scheduler if more than one value provided for args.learn_rate
+        self.scheduler = None
+        if len(self.args.learn_rate) == 2:
+            print("Using exponential learning rate scheduler")
+            self.scheduler = lr_scheduler.ExponentialLR(self.optimizer, gamma=self.args.learn_rate[1])
+
+        elif len(self.args.learn_rate) == 3:
+            print("Using linear learning rate scheduler")
+            endf = self.args.learn_rate[1] / self.args.learn_rate[0]
+            self.scheduler = lr_scheduler.LinearLR(self.optimizer, start_factor=1, end_factor=endf, total_iters=self.args.learn_rate[2])
 
         # initialize empty trajectory and step counter
         self.prev_traj = torch.empty((1, 2))
@@ -159,6 +177,7 @@ class ErgPlanner():
             
             erg.backward()
             self.optimizer.step()
+            if self.scheduler is not None: self.scheduler.step()
 
         # final controls and trajectory
         with torch.no_grad():

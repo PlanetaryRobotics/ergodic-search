@@ -122,6 +122,14 @@ review the available arguments:
 | ```epsilon``` | float | 0.005 | Threshold for loss metric (optimization stops if loss is lower than this) |
 | ```num_freqs``` | int | 0 | Number of frequencies to use. If 0, expects frequencies to be provided in ```fourier_freqs``` |
 
+The ```learn_rate``` parameter can take up to three arguments to specify learning rate schedulers as desired. With one 
+argument, the same learning rate is used throughout optimization. With two arguments, an exponential decay learning rate
+scheduler is used to decay the learning rate over time. In this instance, the first argument is the initial learning 
+rate and the second is the decay rate. With three arguments, a linear learning rate scheduler is used, with the first argument being the initial learning rate, the second the final learning rate, and the third the number of iterations
+over which to apply the linear rate decay.
+
+For the static example discussed [below](#examples), a single learning rate provides the best performance.
+
 
 **Loss Weights**
 
