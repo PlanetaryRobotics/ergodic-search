@@ -24,13 +24,10 @@ class DynModule(torch.nn.Module):
         if not isinstance(init_controls, torch.Tensor):
             init_controls = torch.tensor(init_controls, requires_grad=True)
 
-        start_pose.to(device)
-        init_controls.to(device)
-
-        self.device=device
-        self.start_pose = start_pose
+        self.device = device
         self.traj_steps = traj_steps
         self.controls = torch.nn.Parameter(init_controls)
+        self.register_buffer("start_pose", start_pose)
 
 
 # Dynamics model for computing trajectory given controls

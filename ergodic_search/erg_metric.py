@@ -10,14 +10,16 @@ from functools import partial
 # Module for computing ergodic loss over a PDF
 class ErgLoss(torch.nn.Module):
 
-    def __init__(self, args, dyn_model, pdf=None, fourier_freqs=None, freq_wts=None, device="cpu"):
+    def __init__(self, args, dyn_model, pdf=None, fourier_freqs=None, freq_wts=None):
         
         super(ErgLoss, self).__init__()
         
         self.args = args
+        self.device = "cuda" if self.args.gpu else "cpu"
         self.init_flag = False
-        self.end_pose = torch.tensor(self.args.end_pose, requires_grad=True, device=device)
-        self.device=device
+        self.has_pdf = False if pdf is None else True
+
+        end_pose = torch.tensor(self.args.end_pose, requires_grad=True, device=self.device)
 
         if args.num_freqs == 0 and fourier_freqs is None:
             print("[ERROR] args.num_freqs needs to be positive or fourier_freqs must be provided. Returning with None.")
@@ -26,24 +28,22 @@ class ErgLoss(torch.nn.Module):
         if fourier_freqs is not None:
             if not isinstance(fourier_freqs, torch.Tensor):
                 fourier_freqs = torch.tensor(fourier_freqs)
-            fourier_freqs.to(device)
         
         if freq_wts is not None:
             if not isinstance(freq_wts, torch.Tensor):
                 freq_wts = torch.tensor(freq_wts)
-            fourier_freqs.to(device)
 
-        self.fourier_freqs = fourier_freqs
-        self.freq_wts = freq_wts
+        self.register_buffer("end_pose", end_pose)
+        self.register_buffer("fourier_freqs", fourier_freqs)
+        self.register_buffer("freq_wts", freq_wts)
 
         if pdf is not None:
             if not isinstance(pdf, torch.Tensor):
                 pdf = torch.tensor(pdf)
             if len(pdf.shape) > 1:
                 pdf = pdf.flatten()
-            pdf.to(device)
-            self.pdf = pdf
-            self.set_up_calcs()
+            self.register_buffer("pdf", pdf)
+            self.set_up_calcs()            
 
         self.dyn_model = dyn_model
 
@@ -58,20 +58,20 @@ class ErgLoss(torch.nn.Module):
 
         # get the trajectory from the dynamics model
         traj = self.dyn_model.forward()
-
+        
         # ergodic metric
         erg_metric = torch.sum(self.lambdak * torch.square(self.phik - self.ck(traj)))
-
+        
         # controls regularizer
         control_metric = torch.mean(self.dyn_model.controls**2, dim=0)
-
+        
         # boundary condition counts number of points out of bounds
-        zt = torch.tensor([0])
+        zt = torch.tensor([0], device=self.device)
         bound_metric = torch.sum(torch.maximum(zt, traj[:,:2]-1) + torch.maximum(zt, -traj[:,:2]))
-
+        
         # end point loss
         end_metric = torch.sum((self.end_pose - traj[-1,:])**2)
-
+        
         # print info if desired
         if print_flag:
             print("LOSS: erg = {:4.4f}, control = ({:4.4f}, {:4.4f}), boundary = {:4.4f}, end = {:4.4f}".format(erg_metric, control_metric[0], control_metric[1], bound_metric, end_metric))
@@ -83,6 +83,7 @@ class ErgLoss(torch.nn.Module):
             + (self.args.end_pose_wt * end_metric)
         return loss
 
+
     # just compute the ergodic metric
     def calc_erg_metric(self):
         with torch.no_grad():
@@ -90,23 +91,40 @@ class ErgLoss(torch.nn.Module):
             erg = torch.sum(self.lambdak * torch.square(self.phik - self.ck(traj)))
             return erg
 
+
     # Update the stored map
     def update_pdf(self, pdf, fourier_freqs=None, freq_wts=None):
-        dev = torch.device("cuda") if self.args.gpu else torch.device("cpu")
+
         if len(pdf.shape) > 1:
             pdf = pdf.flatten()
-        self.pdf = pdf
         
-        if fourier_freqs is not None:
-            self.fourier_freqs = fourier_freqs
-            self.fourier_freqs.to(dev)
+        if self.has_pdf == False:
+
+            if fourier_freqs is not None:
+                if not isinstance(fourier_freqs, torch.Tensor):
+                    fourier_freqs = torch.tensor(fourier_freqs)
+                self.register_buffer("fourier_freqs", fourier_freqs)
+
+            if freq_wts is not None:
+                if not isinstance(freq_wts, torch.Tensor):
+                    freq_wts = torch.tensor(freq_wts)
+                self.register_buffer("freq_wts", freq_wts)
+
+            self.register_buffer("pdf", pdf)
+            self.has_pdf = True
         
-        if freq_wts is not None:
-            self.freq_wts = freq_wts
-            self.freq_wts.to(dev)
+        else:
+
+            if fourier_freqs is not None:
+                self.fourier_freqs = fourier_freqs
+            
+            if freq_wts is not None:
+                self.freq_wts = freq_wts
+            
+            self.pdf = pdf
 
         self.set_up_calcs()
-        # self.pdf.to(dev)
+
 
     # set up calculations related to pdf
     # TODO: adjust so we can also use a 3d state space
@@ -117,47 +135,49 @@ class ErgLoss(torch.nn.Module):
         if self.fourier_freqs is None:
             k1, k2 = torch.meshgrid(*[torch.arange(0, self.args.num_freqs, dtype=torch.float64)]*2, indexing='ij')
             k = torch.stack([k1.ravel(), k2.ravel()], dim=1)
-            self.k = torch.pi * k
+            k = torch.pi * k
         else:
-            self.k = self.fourier_freqs
-        self.k.to(self.device)
+            k = self.fourier_freqs
 
         # weights to use
         if self.freq_wts is None:
             # MAH NOTE: my reading of the literature suggests the coefficient below should be (-3/2) instead of (-4/2)
             # however MOES uses (-4/2) and that seems to produce better results, at least for this implementation
-            self.lambdak = (1. + torch.linalg.norm(self.k / torch.pi, dim=1)**2)**(-4./2.)
+            lambdak = (1. + torch.linalg.norm(k / torch.pi, dim=1)**2)**(-4./2.)
         else:
-            self.lambdak = self.freq_wts
-        self.lambdak.to(self.device)
+            lambdak = self.freq_wts
 
         # state variables corresponding to pdf grid
         X, Y = torch.meshgrid(*[torch.linspace(0, 1, self.args.num_pixels, dtype=torch.float64)]*2, indexing='xy')
-        self.s = torch.stack([X.ravel(), Y.ravel()], dim=1)
-        self.s.to(self.device)
+        s = torch.stack([X.ravel(), Y.ravel()], dim=1)
 
         # vmap function for computing fourier coefficients efficiently (hopefully)
         self.fk = lambda x, k : torch.prod(torch.cos(x*k))
         self.fk_vmap = lambda x, k : torch.vmap(self.fk, in_dims=(0,None))(x, k)
 
         # compute hk normalizing factor
-        _hk = (2.*self.k + torch.sin(2.*self.k)) / (4.*self.k)
+        _hk = (2.*k + torch.sin(2.*k)) / (4.*k)
         _hk[torch.isnan(_hk)] = 1.
-        self.hk = torch.sqrt(torch.prod(_hk, dim=1))
-        self.hk.to(self.device)
+        hk = torch.sqrt(torch.prod(_hk, dim=1))
 
         # compute map stats
-        fk_map = torch.vmap(self.fk_vmap, in_dims=(None, 0))(self.s, self.k)
+        fk_map = torch.vmap(self.fk_vmap, in_dims=(None, 0))(s, k)
         phik = fk_map @ self.pdf
         phik = phik / phik[0]
-        self.phik = phik / self.hk
-        self.phik.to(self.device)
+        phik = phik / hk
 
         # map stats for reconstruction
-        self.map_recon = self.phik @ fk_map
+        self.map_recon = phik @ fk_map
+
+        self.register_buffer("k", k)
+        self.register_buffer("lambdak", lambdak)
+        self.register_buffer("s", s)
+        self.register_buffer("hk", hk)
+        self.register_buffer("phik", phik)
 
         # set flag to true so we know we can compute the metric
         self.init_flag = True
+
 
     # compute the trajectory statistics for a trajectory
     def ck(self, traj):
@@ -165,6 +185,7 @@ class ErgLoss(torch.nn.Module):
         ck = torch.mean(fk_traj, dim=1)
         ck = ck / self.hk
         return ck
+
 
     # compute trajectory reconstruction of map
     def traj_recon(self, traj):

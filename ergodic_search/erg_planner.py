@@ -61,11 +61,11 @@ class ErgPlanner():
         self.freq_wts = freq_wts
 
         # get device
-        dev = torch.device("cuda") if args.gpu else torch.device("cpu")
+        self.device = torch.device("cuda") if args.gpu else torch.device("cpu")
 
         # convert starting and ending positions to tensors
-        self.start_pose = torch.tensor(self.args.start_pose, requires_grad=True, device=dev)
-        self.end_pose = torch.tensor(self.args.end_pose, requires_grad=True, device=dev)
+        self.start_pose = torch.tensor(self.args.start_pose, requires_grad=True, device=self.device)
+        self.end_pose = torch.tensor(self.args.end_pose, requires_grad=True, device=self.device)
 
         # flatten pdf if needed
         if pdf is not None and len(pdf.shape) > 1:
@@ -83,13 +83,15 @@ class ErgPlanner():
                     if n == 'controls':
                         p.copy_(init_controls)
             self.dyn_model = dyn_model
+            self.dyn_model.to(self.device)
 
         else:
             print("Using DiffDrive dynamics model")
-            self.dyn_model = DiffDrive(self.start_pose, self.args.traj_steps, init_controls, device=dev)
+            self.dyn_model = DiffDrive(self.start_pose, self.args.traj_steps, init_controls, device=self.device)
 
         # loss module
         self.loss = erg_metric.ErgLoss(self.args, self.dyn_model, self.pdf, fourier_freqs, freq_wts)
+        self.loss.to(self.device)
 
         # optimizer
         self.optimizer = torch.optim.Adam(self.dyn_model.parameters(), lr=self.args.learn_rate[0])
@@ -124,7 +126,7 @@ class ErgPlanner():
 
         # check that the new controls have the correct type
         if not isinstance(new_controls, torch.Tensor):
-            new_controls = torch.tensor(new_controls, requires_grad = True)
+            new_controls = torch.tensor(new_controls, requires_grad=True, device=new_controls.device)
 
         # update the parameter
         for n,p in self.dyn_model.state_dict().items():
@@ -174,15 +176,16 @@ class ErgPlanner():
             # if ergodic metric is low enough, quit
             if erg < self.args.epsilon:
                 break
-            
+
             erg.backward()
             self.optimizer.step()
             if self.scheduler is not None: self.scheduler.step()
 
         # final controls and trajectory
         with torch.no_grad():
-            controls = self.dyn_model.controls.detach()
-            traj = self.dyn_model.forward()
+            controls = self.dyn_model.controls.detach().cpu()
+            traj = self.dyn_model.forward().detach().cpu()
+            erg = erg.cpu()
 
         print("[INFO] Final ergodic metric is {:4.4f}".format(erg))
 
@@ -195,13 +198,14 @@ class ErgPlanner():
 
         with torch.no_grad():
             traj = self.dyn_model.forward().detach()
+            traj_recon = self.loss.traj_recon(traj).cpu()
+            map_recon = self.loss.map_recon.detach().cpu()
 
-        traj_np = traj.numpy()
-        traj_recon = self.loss.traj_recon(traj).reshape((self.args.num_pixels, self.args.num_pixels))
-        map_recon = self.loss.map_recon.detach().reshape((self.args.num_pixels, self.args.num_pixels))
+        traj_np = traj.cpu().numpy()
+        traj_recon = traj_recon.reshape((self.args.num_pixels, self.args.num_pixels))
+        map_recon = map_recon.reshape((self.args.num_pixels, self.args.num_pixels))
 
         fig, ax = plt.subplots(2,2)
-
         fig.set_size_inches(10, 10)
 
         # original map with trajectory
