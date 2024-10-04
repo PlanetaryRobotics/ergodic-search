@@ -20,7 +20,7 @@ def create_map(dim):
     # set up map and underlying grid
     map_ex = np.zeros((dim, dim))
     res = 1 / dim
-    xgrid, ygrid = np.mgrid[0:1:res, 0:1:res]
+    ygrid, xgrid = np.mgrid[0:1:res, 0:1:res]
     map_grid = np.dstack((xgrid, ygrid))
 
     # add a few gaussians
@@ -86,7 +86,7 @@ if __name__ == "__main__":
         print("On step " + str(i) + " / 25")
 
         # plan a trajectory
-        traj = planner.compute_traj(debug=args.debug)
+        controls, traj, erg = planner.compute_traj(debug=args.debug)
 
         # visualize map and trajectory
         planner.visualize(img_name='iter'+str(i))
