@@ -114,7 +114,7 @@ class ErgPlanner():
     def update_pdf(self, pdf, fourier_freqs=None, freq_wts=None):
         if len(pdf.shape) > 1:
             self.pdf = pdf.flatten()
-        self.loss.update_pdf(self.pdf, self.fourier_freqs, self.freq_wts)
+        self.loss.update_pdf(self.pdf, fourier_freqs, freq_wts)
 
 
     # update the controls

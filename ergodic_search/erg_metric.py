@@ -85,15 +85,49 @@ class ErgLoss(torch.nn.Module):
 
 
     # just compute the ergodic metric
-    def calc_erg_metric(self):
+    def calc_erg_metric(self, freqs=None, weights=None):
         with torch.no_grad():
-            traj = self.dyn_model.forward()
-            erg = torch.sum(self.lambdak * torch.square(self.phik - self.ck(traj)))
-            return erg
+            traj = self.dyn_model.forward().cpu()
+            
+            # get components using new frequencies if provided
+            if freqs is not None:
+                # define frequencies to use if none have been provided
+                k = self.get_k(freqs).cpu()
+
+                # weights to use
+                lambdak = self.get_lambdak(k, weights).cpu()
+
+                fk = lambda x, k : torch.prod(torch.cos(x*k))
+                fk_vmap = lambda x, k : torch.vmap(fk, in_dims=(0,None))(x, k)
+
+                _hk = (2.*k + torch.sin(2.*k)) / (4.*k)
+                _hk[torch.isnan(_hk)] = 1.
+                hk = torch.sqrt(torch.prod(_hk, dim=1))
+
+                s = self.s.cpu()
+                fk_map = torch.vmap(fk_vmap, in_dims=(None, 0))(s, k)
+                phik = fk_map @ self.pdf.cpu()
+                phik = phik / phik[0]
+                phik = phik / hk
+
+                fk_traj = torch.vmap(partial(fk_vmap, traj[:,:2]))(k)
+                ck = torch.mean(fk_traj, dim=1)
+                ck = ck / hk
+
+            else:
+                lambdak = self.lambdak
+                phik = self.phik
+                ck = self.ck(traj)
+
+            erg = torch.sum(lambdak * torch.square(phik - ck))
+            return erg.detach()
 
 
     # Update the stored map
     def update_pdf(self, pdf, fourier_freqs=None, freq_wts=None):
+
+        if not isinstance(pdf, torch.Tensor):
+            pdf = torch.tensor(pdf, device=self.device)
 
         if len(pdf.shape) > 1:
             pdf = pdf.flatten()
@@ -132,20 +166,10 @@ class ErgLoss(torch.nn.Module):
     def set_up_calcs(self):
 
         # define frequencies to use if none have been provided
-        if self.fourier_freqs is None:
-            k1, k2 = torch.meshgrid(*[torch.arange(0, self.args.num_freqs, dtype=torch.float64)]*2, indexing='ij')
-            k = torch.stack([k1.ravel(), k2.ravel()], dim=1)
-            k = torch.pi * k
-        else:
-            k = self.fourier_freqs
+        k = self.get_k(self.fourier_freqs)
 
         # weights to use
-        if self.freq_wts is None:
-            # MAH NOTE: my reading of the literature suggests the coefficient below should be (-3/2) instead of (-4/2)
-            # however MOES uses (-4/2) and that seems to produce better results, at least for this implementation
-            lambdak = (1. + torch.linalg.norm(k / torch.pi, dim=1)**2)**(-4./2.)
-        else:
-            lambdak = self.freq_wts
+        lambdak = self.get_lambdak(k, self.freq_wts)
 
         # state variables corresponding to pdf grid
         X, Y = torch.meshgrid(*[torch.linspace(0, 1, self.args.num_pixels, dtype=torch.float64)]*2, indexing='xy')
@@ -190,3 +214,29 @@ class ErgLoss(torch.nn.Module):
     # compute trajectory reconstruction of map
     def traj_recon(self, traj):
         return self.ck(traj) @ torch.vmap(self.fk_vmap, in_dims=(None, 0))(self.s, self.k)
+
+
+    # compute k based on frequencies
+    def get_k(self, freqs=None):
+        if freqs is None:
+            k1, k2 = torch.meshgrid(*[torch.arange(0, self.args.num_freqs, dtype=torch.float64)]*2, indexing='ij')
+            k = torch.stack([k1.ravel(), k2.ravel()], dim=1)
+            k = torch.pi * k
+        else:
+            if not isinstance(freqs, torch.Tensor):
+                freqs = torch.tensor(freqs)
+                freqs.to(self.device)
+            k = freqs
+        return k
+
+
+    # compute lambda k based on frequency weights
+    def get_lambdak(self, k, freq_wts=None):
+        if freq_wts is None:
+            # MAH NOTE: my reading of the literature suggests the coefficient below should be (-3/2) instead of (-4/2)
+            # however MOES uses (-4/2) and that seems to produce better results, at least for this implementation
+            lambdak = (1. + torch.linalg.norm(k / torch.pi, dim=1)**2)**(-4./2.)
+        else:
+            lambdak = freq_wts
+        return lambdak
+
