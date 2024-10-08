@@ -31,6 +31,7 @@ def ErgArgs():
     parser.add_argument('--ang_vel_wt', type=float, default=0.05, help='Weight on angular velocity control size in loss function')
     parser.add_argument('--bound_wt', type=float, default=1000, help='Weight on boundary condition in loss function')
     parser.add_argument('--end_pose_wt', type=float, default=0.5, help='Weight on end position in loss function')
+    parser.add_argument('--prev_traj_wt', type=float, default=10, help='Weight on previous trajectory in loss function')
     parser.add_argument('--debug', action='store_true', help='Whether to print loss components for debugging')
     parser.add_argument('--outpath', type=str, help='File path to save images to, None displays them in a window', default=None)
     args = parser.parse_args()
@@ -114,7 +115,7 @@ class ErgPlanner():
     def update_pdf(self, pdf, fourier_freqs=None, freq_wts=None):
         if len(pdf.shape) > 1:
             self.pdf = pdf.flatten()
-        self.loss.update_pdf(self.pdf, self.fourier_freqs, self.freq_wts)
+        self.loss.update_pdf(self.pdf, fourier_freqs, freq_wts)
 
 
     # update the controls
@@ -138,20 +139,23 @@ class ErgPlanner():
             prev_traj = self.dyn_model.forward().detach()
 
         # update the starting point
-        self.dyn_model.start_pose = prev_traj[0,:]
+        # self.dyn_model.start_pose = prev_traj[0,:]
 
         # update the stored trajectory
-        if self.step_counter > 0:
-            self.prev_traj = torch.cat((self.prev_traj, prev_traj[0,:].unsqueeze(0)))
-        else:
-            self.prev_traj = prev_traj[0,:].unsqueeze(0)
+        # if self.step_counter > 0:
+        #     self.prev_traj = torch.cat((self.prev_traj, prev_traj[0,:].unsqueeze(0)))
+        # else:
+        #     self.prev_traj = prev_traj[0,:].unsqueeze(0)
+        
+        self.prev_traj = prev_traj[0:self.step_counter+1,:]
+        self.loss.prev_traj = self.prev_traj
 
         # update the controls
         # last set will be the same as the final set of controls from previous iteration
-        prev_controls = self.dyn_model.controls.detach()
-        new_controls = torch.roll(prev_controls, -1, 0)
-        new_controls[-1,:] = prev_controls[-1,:]
-        self.update_controls(new_controls)
+        # prev_controls = self.dyn_model.controls.detach()
+        # new_controls = torch.roll(prev_controls, -1, 0)
+        # new_controls[-1,:] = prev_controls[-1,:]
+        # self.update_controls(new_controls)
 
         # increment step counter
         self.step_counter += 1

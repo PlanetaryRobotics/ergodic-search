@@ -46,10 +46,11 @@ class ErgLoss(torch.nn.Module):
             self.set_up_calcs()            
 
         self.dyn_model = dyn_model
+        self.prev_traj = None
 
 
     # compute the ergodic metric
-    def forward(self, print_flag=False):
+    def forward(self, print_flag=True):
 
         # confirm we can do this
         if not self.init_flag:
@@ -71,16 +72,24 @@ class ErgLoss(torch.nn.Module):
         
         # end point loss
         end_metric = torch.sum((self.end_pose - traj[-1,:])**2)
+
+        # previous trajectory loss
+        prev_traj_metric = 0
+        if self.prev_traj is not None:
+            prev_traj_diffs = traj[0:len(self.prev_traj)] - self.prev_traj
+            prev_traj_lengths = torch.linalg.norm(prev_traj_diffs, axis=1)
+            prev_traj_metric = torch.sum(prev_traj_lengths)
         
         # print info if desired
         if print_flag:
-            print("LOSS: erg = {:4.4f}, control = ({:4.4f}, {:4.4f}), boundary = {:4.4f}, end = {:4.4f}".format(erg_metric, control_metric[0], control_metric[1], bound_metric, end_metric))
+            print("LOSS: erg = {:4.4f}, control = ({:4.4f}, {:4.4f}), boundary = {:4.4f}, end = {:4.4f}, previous trajectory = {:4.4f}".format(erg_metric, control_metric[0], control_metric[1], bound_metric, end_metric, prev_traj_metric))
 
         loss = (self.args.erg_wt * erg_metric) \
             + (self.args.transl_vel_wt * control_metric[0]) \
             + (self.args.ang_vel_wt * control_metric[1]) \
             + (self.args.bound_wt * bound_metric) \
-            + (self.args.end_pose_wt * end_metric)
+            + (self.args.end_pose_wt * end_metric) \
+            + (self.args.prev_traj_wt * prev_traj_metric)
         return loss
 
 
@@ -121,7 +130,7 @@ class ErgLoss(torch.nn.Module):
             if freq_wts is not None:
                 self.freq_wts = freq_wts
             
-            self.pdf = pdf
+            self.pdf = torch.from_numpy(pdf)
 
         self.set_up_calcs()
 

@@ -96,3 +96,7 @@ if __name__ == "__main__":
         # visualize map and trajectory
         planner.visualize(img_name='iter'+str(i))
 
+        # "take a step" along the trajectory
+        # this will increment the controls such that the planner will start at the first point in the trajectory and 
+        planner.take_step()
+
