@@ -268,7 +268,7 @@ A differential drive dynamics class (```ergodic_search.dynamics.DiffDrive```) is
 
 1. Derive from the ```DynModule``` base class defined in ```ergodic_search.dynamics```.
 2. Contain a ```forward``` method that uses ```self.controls``` to compute a trajectory. Note that the trajectory __should not__ include the starting position as the first point and should have the same number of steps as the controls.
-3. Be differentiable via autodiff or provide an explicit gradient for the trajectory wrt the controls. This means using Pytorch functions like ```torch.cumsum``` instead of for loops to compute the trajectory.
+3. Be differentiable via autodiff or provide an explicit gradient for the trajectory wrt the controls. This means using Pytorch functions like ```torch.cumsum``` instead of for loops or defining custom autograd functions with a forward and backward method to implement gradient computations (more information on this approach can be found [here](https://pytorch.org/tutorials/beginner/examples_autograd/two_layer_net_custom_function.html).
 
 User-defined dynamics modules can be provided to the planner on initialization via the ```dyn_model``` parameter. All examples rely on the included differential drive class.
 
