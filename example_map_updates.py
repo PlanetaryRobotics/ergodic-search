@@ -89,7 +89,7 @@ if __name__ == "__main__":
         controls, traj, erg = planner.compute_traj(debug=args.debug)
 
         # change the map by shifting one of the densities and update the planner
-        LOCS[1][1] += 0.05
+        LOCS[0][0] += 0.05
         new_map = create_map(args.num_pixels)
         planner.update_pdf(new_map)
 
