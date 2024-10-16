@@ -31,14 +31,20 @@ def ErgArgs():
     parser.add_argument('--ang_vel_wt', type=float, default=0.05, help='Weight on angular velocity control size in loss function')
     parser.add_argument('--bound_wt', type=float, default=1000, help='Weight on boundary condition in loss function')
     parser.add_argument('--end_pose_wt', type=float, default=0.5, help='Weight on end position in loss function')
+    parser.add_argument('--prev_traj_wt', type=float, default=10, help='Weight on previous trajectory in loss function')
     parser.add_argument('--debug', action='store_true', help='Whether to print loss components for debugging')
     parser.add_argument('--outpath', type=str, help='File path to save images to, None displays them in a window', default=None)
+    parser.add_argument('--replan_type', type=str, default='full', help='Type of replanning to perform (accepts partial or full)')
     args = parser.parse_args()
     print(args)
 
     # check if outpath exists and make it if not
     if args.outpath is not None and os.path.exists(args.outpath) == False:
         os.mkdir(args.outpath)
+
+    # check that replan type is one of options
+    if args.replan_type != 'full' and args.replan_type != 'partial':
+        print('Incorrect replan_type, must be one of full or partial. Planner will not perform as expected.')
 
     return args
 
@@ -137,21 +143,32 @@ class ErgPlanner():
         with torch.no_grad():
             prev_traj = self.dyn_model.forward().detach()
 
-        # update the starting point
-        self.dyn_model.start_pose = prev_traj[0,:]
+        if self.args.replan_type == 'partial':
 
-        # update the stored trajectory
-        if self.step_counter > 0:
-            self.prev_traj = torch.cat((self.prev_traj, prev_traj[0,:].unsqueeze(0)))
+            # update stored previous trajectory
+            self.prev_traj = prev_traj[0:self.step_counter+1,:]
+
+        elif self.args.replan_type == 'full':
+
+            # append to stored previous trajectory
+            if self.step_counter > 0:
+                self.prev_traj = torch.cat((self.prev_traj, prev_traj[0,:].unsqueeze(0)))
+            else:
+                self.prev_traj = prev_traj[0,:].unsqueeze(0)
+
+            # update the starting point
+            self.dyn_model.start_pose = prev_traj[0,:]
+
+            # update the controls
+            # last set will be the same as the final set of controls from previous iteration
+            prev_controls = self.dyn_model.controls.detach()
+            new_controls = torch.roll(prev_controls, -1, 0)
+            new_controls[-1,:] = prev_controls[-1,:]
+            self.update_controls(new_controls)
+
         else:
-            self.prev_traj = prev_traj[0,:].unsqueeze(0)
-
-        # update the controls
-        # last set will be the same as the final set of controls from previous iteration
-        prev_controls = self.dyn_model.controls.detach()
-        new_controls = torch.roll(prev_controls, -1, 0)
-        new_controls[-1,:] = prev_controls[-1,:]
-        self.update_controls(new_controls)
+            print('Incorrect replanning type used, not storing previous trajectory or incrementing steps')
+            return
 
         # increment step counter
         self.step_counter += 1

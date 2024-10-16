@@ -257,7 +257,7 @@ The second script, ```example_map_updates.py```, provides a simple example in wh
 
 The third script, ```example_replanning.py```, provides an example in which the trajectory is re-planned after taking a step and can be used to see how the control updates and ```take_step``` work. The gif below shows the results from this example:
 
-![Replanning Example](images/example_replan.gif)
+![Replanning Example](images/example_replan_full.gif)
 
 Note that this is a contrived example and does not represent how ergodic search should be used in practice (e.g. the information at each point is not changing as information is gathered). For more information, see [[3]](#3).
 

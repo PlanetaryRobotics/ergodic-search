@@ -15,9 +15,10 @@ class ErgLoss(torch.nn.Module):
         super(ErgLoss, self).__init__()
         
         self.args = args
-        self.device = "cuda" if self.args.gpu else "cpu"
+        self.device = 'cuda' if self.args.gpu else 'cpu'
         self.init_flag = False
         self.has_pdf = False if pdf is None else True
+        prev_traj = None
 
         end_pose = torch.tensor(self.args.end_pose, requires_grad=True, device=self.device)
 
@@ -36,6 +37,7 @@ class ErgLoss(torch.nn.Module):
         self.register_buffer("end_pose", end_pose)
         self.register_buffer("fourier_freqs", fourier_freqs)
         self.register_buffer("freq_wts", freq_wts)
+        self.register_buffer("prev_traj", prev_traj)
 
         if pdf is not None:
             if not isinstance(pdf, torch.Tensor):
@@ -71,16 +73,24 @@ class ErgLoss(torch.nn.Module):
         
         # end point loss
         end_metric = torch.sum((self.end_pose - traj[-1,:])**2)
+
+        # loss associated with previous trajectory
+        prev_traj_metric = 0
+        if self.prev_traj is not None and self.args.replan_type == 'partial':
+            prev_traj_diffs = traj[0:len(self.prev_traj)] - self.prev_traj
+            prev_traj_lengths = torch.linalg.norm(prev_traj_diffs, axis=1)
+            prev_traj_metric = torch.sum(prev_traj_lengths)
         
         # print info if desired
         if print_flag:
-            print("LOSS: erg = {:4.4f}, control = ({:4.4f}, {:4.4f}), boundary = {:4.4f}, end = {:4.4f}".format(erg_metric, control_metric[0], control_metric[1], bound_metric, end_metric))
+            print("LOSS: erg = {:4.4f}, control = ({:4.4f}, {:4.4f}), boundary = {:4.4f}, end = {:4.4f}, previous trajectory = {:4.4f}".format(erg_metric, control_metric[0], control_metric[1], bound_metric, end_metric, prev_traj_metric))
 
         loss = (self.args.erg_wt * erg_metric) \
             + (self.args.transl_vel_wt * control_metric[0]) \
             + (self.args.ang_vel_wt * control_metric[1]) \
             + (self.args.bound_wt * bound_metric) \
-            + (self.args.end_pose_wt * end_metric)
+            + (self.args.end_pose_wt * end_metric) \
+            + (self.args.prev_traj_wt * prev_traj_metric)
         return loss
 
 
@@ -127,7 +137,7 @@ class ErgLoss(torch.nn.Module):
     def update_pdf(self, pdf, fourier_freqs=None, freq_wts=None):
 
         if not isinstance(pdf, torch.Tensor):
-            pdf = torch.tensor(pdf, device=self.device)
+            pdf = torch.tensor(pdf)
 
         if len(pdf.shape) > 1:
             pdf = pdf.flatten()
@@ -158,6 +168,7 @@ class ErgLoss(torch.nn.Module):
             self.pdf = pdf
 
         self.set_up_calcs()
+        self.pdf = self.pdf.to(self.device)
 
 
     # set up calculations related to pdf
@@ -193,14 +204,25 @@ class ErgLoss(torch.nn.Module):
         # map stats for reconstruction
         self.map_recon = phik @ fk_map
 
-        self.register_buffer("k", k)
-        self.register_buffer("lambdak", lambdak)
-        self.register_buffer("s", s)
-        self.register_buffer("hk", hk)
-        self.register_buffer("phik", phik)
+        if self.init_flag == False:
 
-        # set flag to true so we know we can compute the metric
-        self.init_flag = True
+            self.register_buffer("k", k)
+            self.register_buffer("lambdak", lambdak)
+            self.register_buffer("s", s)
+            self.register_buffer("hk", hk)
+            self.register_buffer("phik", phik)
+
+            # set flag to true so we know we can compute the metric
+            self.init_flag = True
+
+        else:
+
+            # update previously stored values
+            self.k = k.to(self.device)
+            self.lambdak = lambdak.to(self.device)
+            self.s = s.to(self.device)
+            self.hk = hk.to(self.device)
+            self.phik = phik.to(self.device)
 
 
     # compute the trajectory statistics for a trajectory
@@ -225,7 +247,6 @@ class ErgLoss(torch.nn.Module):
         else:
             if not isinstance(freqs, torch.Tensor):
                 freqs = torch.tensor(freqs)
-                freqs.to(self.device)
             k = freqs
         return k
 

@@ -40,7 +40,7 @@ if __name__ == "__main__":
 
     # parse arguments
     args = erg_planner.ErgArgs()
-    args.outpath = 'results/replan'
+    args.outpath = 'results/replan_'+args.replan_type
     args.iters = 3000
 
     if args.outpath is not None:
@@ -81,15 +81,23 @@ if __name__ == "__main__":
     planner = erg_planner.ErgPlanner(args, map_ex, init_controls=init_controls, dyn_model=diff_drive)
 
     # now loop through and update / re-plan after each step in the trajectory
-    for i in range(25):
+    for i in range(12):
 
-        print("On step " + str(i) + " / 25")
+        print("On step " + str(i) + " / 11")
 
         # plan a trajectory
         controls, traj, erg = planner.compute_traj(debug=args.debug)
 
         # visualize map and trajectory
         planner.visualize(img_name='iter'+str(i))
+
+        if args.replan_type == 'partial':
+
+            # change the map by shifting one of the densities and update the planner
+            # this is included because replanning with partial will not do anything unless the map changes
+            LOCS[0][0] += 0.05
+            new_map = create_map(args.num_pixels)
+            planner.update_pdf(new_map)
 
         # "take a step" along the trajectory
         # this will increment the controls such that the planner will start at the first point in the trajectory and 

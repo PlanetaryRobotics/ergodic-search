@@ -88,11 +88,11 @@ if __name__ == "__main__":
         # plan a trajectory
         controls, traj, erg = planner.compute_traj(debug=args.debug)
 
+        # visualize map and trajectory
+        planner.visualize(img_name='iter'+str(i))
+
         # change the map by shifting one of the densities and update the planner
         LOCS[0][0] += 0.05
         new_map = create_map(args.num_pixels)
         planner.update_pdf(new_map)
-
-        # visualize map and trajectory
-        planner.visualize(img_name='iter'+str(i))
 
