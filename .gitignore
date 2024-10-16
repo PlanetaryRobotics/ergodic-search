@@ -7,9 +7,10 @@ __pycache__/
 *.so
 
 # ignore images, model graphs, text files, results
-model_graph*
+model_*
 *.txt
 results/
+*.pdf
 
 # Distribution / packaging
 .Python

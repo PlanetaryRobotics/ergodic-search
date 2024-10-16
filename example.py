@@ -6,6 +6,7 @@ import torch
 import numpy as np
 from scipy.stats import multivariate_normal as norm
 import matplotlib.pyplot as plt
+from torchviz import make_dot
 
 from ergodic_search import erg_planner
 from ergodic_search.dynamics import DiffDrive
@@ -74,6 +75,10 @@ if __name__ == "__main__":
 
     # initialize planner
     planner = erg_planner.ErgPlanner(args, map_ex, init_controls=init_controls, dyn_model=diff_drive)
+
+    # print model graph
+    # dot = make_dot(planner.loss(), params=dict(planner.loss.named_parameters()))
+    # dot.render("model_visualization", format="pdf")
 
     # generate a trajectory
     start = time.time()
