@@ -78,7 +78,7 @@ does not return any values.
 
 ##### ```take_step```
 
-''Takes a step'' in the trajectory by setting the new start point to the first point in the current trajectory and incrementing the controls by one. Final controls are initialized to be the same as the second to last set of controls. This function makes use of the ```update_controls``` function and does not take any parameters nor return any values.
+''Takes a step'' in the trajectory based on the specified replanning type. If ```replan_type``` is set to 'full', this function sets the new start point to the first point in the current trajectory and increments the controls by one, relying on ```update_controls``` to do so. Final controls are initialized to be the same as the second to last set of controls. If ```replan_type``` is set to 'partial', this function simply records the previous trajectory and increments the step counter. This function does not take any parameters nor return any values.
 
 ##### ```compute_traj```
 
@@ -112,6 +112,13 @@ review the available arguments:
 | ```traj_steps``` | int | 100 | Number of steps in the trajectory |
 | ```start_pose``` | float(3) | [0,0,0] | Starting position (x, y, theta) |
 | ```end_pose``` | float(3) | [0,0,0] | Ending position (x, y, theta) |
+| ```replan_type``` | string | 'full' | Type of replanning to perform (partial or full) |
+
+The ```replan_type``` parameter specifies what type of replanning should be performed when the planner is used iteratively. Two types of replanning are currently available, 'full' and 'partial.' Full replanning
+increments the starting position of the planner to the first point in the planned trajectory and replans a full trajectory from this starting point. This type of replanning does not consider the previous trajectory
+when recomputing the ergodic metric and the optimizing the new trajectory. Partial replanning instead only replans the remaining steps in the trajectory and considers the previous trajectory in the ergodic metric
+computation and optimization. This replanning is currently implemented using a soft constraint applied to the previous trajectory points - that is, a large weight is applied to a loss component associated with points
+in the prior trajectory steps being different than the actual points. This will be updated to a hard constraint in future iterations.
 
 **Optimization Parameters**
 
@@ -140,6 +147,7 @@ For the static example discussed [below](#examples), a single learning rate prov
 | ```ang_vel_wt``` | float | 0.05 | Weight on angular velocity component of loss |
 | ```bound_wt``` | float | 100 | Weight on boundary component of loss |
 | ```end_pose_wt``` | float | 0.5 | Weight on end position component of loss |
+| ```prev_traj_wt``` | float | 10 | Weight on previous trajectory points matching the actual previous steps in the loss function (only used when ```replan_type``` = partial) |
 
 _Note_: These weights can be set to 0 to remove any component from consideration when optimizing. The most useful application 
 of this property is to remove the need for an end point by setting ```end_pose_wt``` to 0. This will still require provision of an 
@@ -154,9 +162,9 @@ end position in the arguments but this end position is ignored and can be safely
 
 **Other Parameters**
 
-| Parameter | Description |
-| ----- | ----- |
-| ```outpath``` | File path for saving visualizations, defaults to None and displays visuals in a window |
+| Parameter | Type | Default | Description |
+| ----- | ----- | ----- | ----- |
+| ```outpath``` | string | None | File path for saving visualizations, None displays visuals in a window |
 
 
 ### The ErgLoss Class
@@ -240,6 +248,15 @@ statistics $c_k$ using the stored frequency information and normalizing factors.
 Computes a reconstruction of the map from trajectory statistics using the trajectory provided via the ```traj``` argument.
 The map reconstruction is returned as a flat array that can be reshaped to the original 2D map using the number of pixels as ```recon.reshape((args.num_pixels, args.num_pixels))```
 
+##### ```get_k``` 
+
+Sets the frequency vectors for ergodic search ($k$ in the above equations) based on whether or not frequencies are provided by the user. The optional parameter ```freqs``` can be used to specify what frequencies to use.
+Otherwise, these are set to integers between 0 and the number of frequencies argument (```num_freqs```), multiplied by $\pi$. This function returns the vector of frequencies ```k```.
+
+##### ```get_lambdak```
+
+Sets the frequency weight vectors ($\Lambda_k$ in the above equations) based on whether or not frequency weights are provided by the user. The optional parameter ```freq_wts``` can be used to specify what frequency weights to use.
+Otherwise, these are set to $\Lambda_k = \frac{1}{(1+||k||^2)^s}$ where $s = 2$.
 
 ### Examples
 
@@ -255,11 +272,14 @@ The second script, ```example_map_updates.py```, provides a simple example in wh
 
 ![Map Update Example](images/example_map_updates.gif)
 
-The third script, ```example_replanning.py```, provides an example in which the trajectory is re-planned after taking a step and can be used to see how the control updates and ```take_step``` work. The gif below shows the results from this example:
+The third script, ```example_replanning.py```, provides an example in which the trajectory is replanned after taking a step (using ```replan_type = 'full'```) and can be used to see how the control updates and ```take_step``` work. The gif below shows the results from this example:
 
 ![Replanning Example](images/example_replan_full.gif)
 
 Note that this is a contrived example and does not represent how ergodic search should be used in practice (e.g. the information at each point is not changing as information is gathered). For more information, see [[3]](#3).
+
+This example can also demonstrate partial trajectory replanning if provided with the command line argument ```--replan_type partial```. In this case, the map is also updated as is done for the map update example because otherwise
+the trajectory will not change when replanned. These results look similar to the results from the map updates example.
 
 
 ### Incorporating Dynamics Models
