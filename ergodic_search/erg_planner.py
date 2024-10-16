@@ -31,7 +31,6 @@ def ErgArgs():
     parser.add_argument('--ang_vel_wt', type=float, default=0.05, help='Weight on angular velocity control size in loss function')
     parser.add_argument('--bound_wt', type=float, default=1000, help='Weight on boundary condition in loss function')
     parser.add_argument('--end_pose_wt', type=float, default=0.5, help='Weight on end position in loss function')
-    parser.add_argument('--prev_traj_wt', type=float, default=10, help='Weight on previous trajectory in loss function')
     parser.add_argument('--debug', action='store_true', help='Whether to print loss components for debugging')
     parser.add_argument('--outpath', type=str, help='File path to save images to, None displays them in a window', default=None)
     parser.add_argument('--replan_type', type=str, default='full', help='Type of replanning to perform (accepts partial or full)')
@@ -68,8 +67,8 @@ class ErgPlanner():
         self.device = torch.device("cuda") if args.gpu else torch.device("cpu")
 
         # convert starting and ending positions to tensors
-        self.start_pose = torch.tensor(self.args.start_pose, requires_grad=True, device=self.device)
-        self.end_pose = torch.tensor(self.args.end_pose, requires_grad=True, device=self.device)
+        self.start_pose = torch.tensor(self.args.start_pose, device=self.device)
+        self.end_pose = torch.tensor(self.args.end_pose, device=self.device)
 
         # flatten pdf if needed
         if pdf is not None and len(pdf.shape) > 1:
@@ -115,6 +114,8 @@ class ErgPlanner():
         self.prev_traj = torch.empty((1, 2))
         self.step_counter = 0
 
+        # register hook for partial replanning gradient edit
+        self.loss.dyn_model.controls.register_hook(lambda grad: self.grad_hook(grad, self.step_counter))
 
     # update the spatial distribution and store it in the loss computation module
     def update_pdf(self, pdf, fourier_freqs=None, freq_wts=None):
@@ -190,7 +191,8 @@ class ErgPlanner():
             if erg < self.args.epsilon:
                 break
 
-            erg.backward()
+            # optimize the controls
+            erg.backward(inputs=self.loss.dyn_model.controls)
             self.optimizer.step()
             if self.scheduler is not None: self.scheduler.step()
 
@@ -221,25 +223,27 @@ class ErgPlanner():
         fig, ax = plt.subplots(2,2)
         fig.set_size_inches(10, 10)
 
+        s = self.step_counter if self.args.replan_type == 'partial' else 0
+
         # original map with trajectory
         ax[0,0].imshow(self.pdf.reshape((self.args.num_pixels, self.args.num_pixels)), extent=[0,1,0,1], origin='lower', cmap=cmap)
         ax[0,0].set_title('Original Map and Trajectory')
-        ax[0,0].scatter(traj_np[:,0], traj_np[:,1], c='r', s=2)
+        ax[0,0].scatter(traj_np[s:,0], traj_np[s:,1], c='r', s=2)
 
         # reconstructed map from map stats
         ax[1,0].imshow(map_recon, extent=[0,1,0,1], origin='lower', cmap=cmap)
         ax[1,0].set_title('Reconstructed Map from Map Stats')
-        ax[1,0].scatter(traj_np[:,0], traj_np[:,1], c='r', s=2)
+        ax[1,0].scatter(traj_np[s:,0], traj_np[s:,1], c='r', s=2)
 
         # error between traj stats and map stats
         ax[0,1].imshow(map_recon - traj_recon, extent=[0,1,0,1], origin='lower', cmap=cmap)
         ax[0,1].set_title('Reconstruction Difference (Map - Traj)')
-        ax[0,1].scatter(traj_np[:,0], traj_np[:,1], c='r', s=2)
+        ax[0,1].scatter(traj_np[s:,0], traj_np[s:,1], c='r', s=2)
 
         # reconstructed map from trajectory stats
         ax[1,1].imshow(traj_recon, extent=[0,1,0,1], origin='lower', cmap=cmap)
         ax[1,1].set_title('Reconstructed Map from Traj Stats')
-        ax[1,1].scatter(traj_np[:,0], traj_np[:,1], c='r', s=2)
+        ax[1,1].scatter(traj_np[s:,0], traj_np[s:,1], c='r', s=2)
 
         if self.step_counter > 0:
             prev_traj_np = self.prev_traj.cpu().numpy()
@@ -253,3 +257,10 @@ class ErgPlanner():
         else:
             plt.show()
         plt.close()
+
+    # hook for setting gradient for certain controls equal to 0
+    # used for partial replanning
+    def grad_hook(self, grad, s):
+        if self.args.replan_type == 'partial':
+            new_grad = torch.cat((torch.zeros((s, 2)).to(self.device), grad[s:,:]))
+            return new_grad
