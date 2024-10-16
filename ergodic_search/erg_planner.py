@@ -242,7 +242,7 @@ class ErgPlanner():
         ax[1,1].scatter(traj_np[:,0], traj_np[:,1], c='r', s=2)
 
         if self.step_counter > 0:
-            prev_traj_np = self.prev_traj.numpy()
+            prev_traj_np = self.prev_traj.cpu().numpy()
             ax[0,0].scatter(prev_traj_np[:,0], prev_traj_np[:,1], c='k', s=2)
             ax[1,0].scatter(prev_traj_np[:,0], prev_traj_np[:,1], c='k', s=2)
             ax[0,1].scatter(prev_traj_np[:,0], prev_traj_np[:,1], c='k', s=2)
