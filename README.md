@@ -117,8 +117,7 @@ review the available arguments:
 The ```replan_type``` parameter specifies what type of replanning should be performed when the planner is used iteratively. Two types of replanning are currently available, 'full' and 'partial.' Full replanning
 increments the starting position of the planner to the first point in the planned trajectory and replans a full trajectory from this starting point. This type of replanning does not consider the previous trajectory
 when recomputing the ergodic metric and the optimizing the new trajectory. Partial replanning instead only replans the remaining steps in the trajectory and considers the previous trajectory in the ergodic metric
-computation and optimization. This replanning is currently implemented using a soft constraint applied to the previous trajectory points - that is, a large weight is applied to a loss component associated with points
-in the prior trajectory steps being different than the actual points. This will be updated to a hard constraint in future iterations.
+computation and optimization. This replanning is implemented by forcing the gradients associated with the previous trajectory controls to be zero, so the optimizer will not change these values.
 
 **Optimization Parameters**
 
@@ -147,7 +146,6 @@ For the static example discussed [below](#examples), a single learning rate prov
 | ```ang_vel_wt``` | float | 0.05 | Weight on angular velocity component of loss |
 | ```bound_wt``` | float | 100 | Weight on boundary component of loss |
 | ```end_pose_wt``` | float | 0.5 | Weight on end position component of loss |
-| ```prev_traj_wt``` | float | 10 | Weight on previous trajectory points matching the actual previous steps in the loss function (only used when ```replan_type``` = partial) |
 
 _Note_: These weights can be set to 0 to remove any component from consideration when optimizing. The most useful application 
 of this property is to remove the need for an end point by setting ```end_pose_wt``` to 0. This will still require provision of an 
@@ -279,7 +277,7 @@ The third script, ```example_replanning.py```, provides an example in which the 
 Note that this is a contrived example and does not represent how ergodic search should be used in practice (e.g. the information at each point is not changing as information is gathered). For more information, see [[3]](#3).
 
 This example can also demonstrate partial trajectory replanning if provided with the command line argument ```--replan_type partial```. In this case, the map is also updated as is done for the map update example because otherwise
-the trajectory will not change when replanned. These results look similar to the results from the map updates example.
+the trajectory will not change when replanned. These results look similar to the results from the map updates example but the previous trajectory points will not change.
 
 
 ### Incorporating Dynamics Models
