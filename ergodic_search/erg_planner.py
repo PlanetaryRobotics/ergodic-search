@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 
 from torch.optim import lr_scheduler
 
-from ergodic_search import erg_metric
-from ergodic_search.dynamics import DiffDrive
+from erg_metric import ErgLoss
+from dynamics import DiffDrive
 
 
 # parameters that can be changed
@@ -93,7 +93,7 @@ class ErgPlanner():
             self.dyn_model = DiffDrive(self.start_pose, self.args.traj_steps, init_controls, device=self.device)
 
         # loss module
-        self.loss = erg_metric.ErgLoss(self.args, self.dyn_model, self.pdf, fourier_freqs, freq_wts)
+        self.loss = ErgLoss(self.args, self.dyn_model, self.pdf, fourier_freqs, freq_wts)
         self.loss.to(self.device)
 
         # optimizer
