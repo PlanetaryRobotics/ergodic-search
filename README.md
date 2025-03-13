@@ -18,6 +18,7 @@ optimization step.
     - [Examples](#examples)
     - [Custom Dynamics](#incorporating-dynamics-models)
 - [Troubleshooting](#troubleshooting-tips)
+- [Contributing to the Repository](#contributing-to-the-repository)
 - [References](#references)
 
 ## Dependencies
@@ -317,6 +318,9 @@ More information on ```torchviz``` can be found [here](https://github.com/szagor
 **The controls aren't changing and the ergodic metric isn't decreasing during optimization**
 
 Provide an initial set of controls that isn't all zeros. With an all-zero set of controls, PyTorch cannot compute gradients correctly and will not be able to optimize. The initial set of controls can be as simple as a constant translational velocity with no angular velocity.
+
+## Contributing to the Repository
+Contributions are welcome! Please make branch names descriptive of the included contribution. A pull request approval is required for adding contributions to the main branch; we will do our best to address these in a timely manner.
 
 ## References
 
