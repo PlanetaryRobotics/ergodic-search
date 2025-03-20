@@ -6,6 +6,7 @@ import torch
 import numpy as np
 from scipy.stats import multivariate_normal as norm
 import matplotlib.pyplot as plt
+import time
 
 from ergodic_search import erg_planner
 from ergodic_search.dynamics import DiffDrive
@@ -91,13 +92,13 @@ if __name__ == "__main__":
         # visualize map and trajectory
         planner.visualize(img_name='iter'+str(i))
 
-        if args.replan_type == 'partial':
+        if args.replan_type == 'full':
 
             # change the map by shifting one of the densities and update the planner
             # this is included because replanning with partial will not do anything unless the map changes
             LOCS[0][0] += 0.05
             new_map = create_map(args.num_pixels)
-            planner.update_pdf(new_map)
+            # planner.update_pdf(new_map)
 
         # "take a step" along the trajectory
         # this will increment the controls such that the planner will start at the first point in the trajectory and 

@@ -13,6 +13,8 @@ from torch.optim import lr_scheduler
 from ergodic_search import erg_metric
 from ergodic_search.dynamics import DiffDrive
 
+from tqdm import tqdm
+
 
 # parameters that can be changed
 def ErgArgs():
@@ -34,6 +36,8 @@ def ErgArgs():
     parser.add_argument('--debug', action='store_true', help='Whether to print loss components for debugging')
     parser.add_argument('--outpath', type=str, help='File path to save images to, None displays them in a window', default=None)
     parser.add_argument('--replan_type', type=str, default='full', help='Type of replanning to perform (accepts partial or full)')
+    parser.add_argument('--sensor_variance', type=float, default=0.01, help='Variance of the Gaussian sensor footprint')
+
     args = parser.parse_args()
     print(args)
 
@@ -175,37 +179,35 @@ class ErgPlanner():
         self.step_counter += 1
 
 
-    # compute ergodic trajectory over spatial distribution
     def compute_traj(self, debug=False):
-        
-        # iterate
-        for i in range(self.args.iters):
-            self.optimizer.zero_grad()
-            erg = self.loss(print_flag=debug)
+        # iterate with a progress bar that updates with the current ergodic metric
+        with tqdm(range(self.args.iters), desc="Trajectory optimization in progress...") as pbar:
+            for i in pbar:
+                self.optimizer.zero_grad()
+                erg = self.loss(print_flag=debug)
+                
+                # update the progress bar with the current ergodic metric
+                pbar.set_postfix({'erg': erg.item()})
+                
+                # if ergodic metric is low enough, quit early
+                if erg < self.args.epsilon:
+                    break
 
-            # print progress every 100th iter
-            if i % 100 == 0 and not debug:
-                print("[INFO] Iteration {:d} of {:d}, ergodic metric is {:4.4f}".format(i, self.args.iters, erg))
-            
-            # if ergodic metric is low enough, quit
-            if erg < self.args.epsilon:
-                break
+                # optimize the controls
+                erg.backward(inputs=self.loss.dyn_model.controls)
+                self.optimizer.step()
+                if self.scheduler is not None:
+                    self.scheduler.step()
 
-            # optimize the controls
-            erg.backward(inputs=self.loss.dyn_model.controls)
-            self.optimizer.step()
-            if self.scheduler is not None: self.scheduler.step()
-
-        # final controls and trajectory
+        # final controls and trajectory after optimization
         with torch.no_grad():
             controls = self.dyn_model.controls.detach().cpu()
             traj = self.dyn_model.forward().detach().cpu()
             erg = erg.cpu()
 
         print("[INFO] Final ergodic metric is {:4.4f}".format(erg))
-
-        # return controls, trajectory, and final ergodic metric
         return controls, traj, erg
+
 
 
     # visualize the output

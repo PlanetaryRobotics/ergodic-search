@@ -47,6 +47,8 @@ if __name__ == "__main__":
     args.start_pose = [0.2, 0.2, 0]
     args.end_pose = [0.8, 0.8, 0]
     args.num_freqs = 10
+    args.num_pixels = 1000
+    args.traj_steps = 100
 
     # create dynamics module
     diff_drive = DiffDrive(args.start_pose, args.traj_steps)

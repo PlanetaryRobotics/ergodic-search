@@ -42,6 +42,7 @@ class ErgLoss(torch.nn.Module):
                 pdf = torch.tensor(pdf)
             if len(pdf.shape) > 1:
                 pdf = pdf.flatten()
+            pdf = pdf.to(torch.float64)   # Ensure PDF is in double precision
             self.register_buffer("pdf", pdf)
             self.set_up_calcs()            
 
@@ -215,11 +216,59 @@ class ErgLoss(torch.nn.Module):
             self.phik = phik.to(self.device)
 
 
-    # compute the trajectory statistics for a trajectory
+    # compute the trajectory statistics for a trajectory using a Gaussian sensing footprint,
     def ck(self, traj):
-        fk_traj = torch.vmap(partial(self.fk_vmap, traj[:,:2]))(self.k)
-        ck = torch.mean(fk_traj, dim=1)
+        """
+        Compute the Fourier coefficients of the trajectory using a Gaussian sensor model,
+        vectorized to compute over all trajectory points at once and masking out areas beyond 3σ.
+        """
+        grid_size = self.args.num_pixels
+        # Create the global grid (using float64)
+        x_lin = torch.linspace(0, 1, grid_size, dtype=torch.float64, device=self.device)
+        y_lin = torch.linspace(0, 1, grid_size, dtype=torch.float64, device=self.device)
+        x_grid, y_grid = torch.meshgrid(x_lin, y_lin, indexing='ij')  # shape: (grid_size, grid_size)
+
+        # Expand grid to (1, grid_size, grid_size) so we can broadcast with the trajectory
+        x_grid_exp = x_grid.unsqueeze(0)  # shape: (1, grid_size, grid_size)
+        y_grid_exp = y_grid.unsqueeze(0)  # shape: (1, grid_size, grid_size)
+
+        # Get trajectory positions; traj assumed to have shape (N, 3) so we take the first two columns
+        N = traj.shape[0]
+        traj_xy = traj[:, :2]                # shape: (N, 2)
+        traj_x = traj_xy[:, 0].view(N, 1, 1)   # shape: (N, 1, 1)
+        traj_y = traj_xy[:, 1].view(N, 1, 1)   # shape: (N, 1, 1)
+
+        # Compute squared Euclidean distances between each trajectory point and every grid point
+        dx = x_grid_exp - traj_x             # shape: (N, grid_size, grid_size)
+        dy = y_grid_exp - traj_y             # shape: (N, grid_size, grid_size)
+        dist_sq = dx**2 + dy**2              # shape: (N, grid_size, grid_size)
+
+        # Compute sigma from the sensor variance; values beyond 3σ are negligible.
+        sigma = self.args.sensor_variance ** 0.5
+        threshold = (3 * sigma) ** 2         # squared threshold
+
+        # Create a mask for distances within 3σ
+        mask = (dist_sq <= threshold)        # shape: (N, grid_size, grid_size)
+
+        # Compute the Gaussian sensor value for each trajectory point on the grid
+        gaussian_vals = torch.exp(-dist_sq / (2 * self.args.sensor_variance))
+        gaussian_vals = gaussian_vals * mask.to(gaussian_vals.dtype)  # Zero out values beyond 3σ
+
+        # Sum the contributions of all trajectory points to get the observation map (global grid)
+        observation_map = gaussian_vals.sum(dim=0)  # shape: (grid_size, grid_size)
+
+        # Normalize the observation map to form a probability distribution
+        observation_map /= observation_map.sum()
+
+        # Flatten the observation map to match the expected input for Fourier coefficient calculation
+        observation_map = observation_map.flatten()  # shape: (grid_size*grid_size,)
+
+        # Compute Fourier coefficients for the observation map using the precomputed basis (vmap)
+        fk_map = torch.vmap(self.fk_vmap, in_dims=(None, 0))(self.s, self.k)
+        ck = fk_map @ observation_map
+        ck = ck / ck[0]
         ck = ck / self.hk
+
         return ck
 
 
