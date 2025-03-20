@@ -320,7 +320,7 @@ More information on ```torchviz``` can be found [here](https://github.com/szagor
 Provide an initial set of controls that isn't all zeros. With an all-zero set of controls, PyTorch cannot compute gradients correctly and will not be able to optimize. The initial set of controls can be as simple as a constant translational velocity with no angular velocity.
 
 ## Contributing to the Repository
-Contributions are welcome! Please make branch names descriptive of the included contribution. A pull request approval is required for adding contributions to the main branch; we will do our best to address these in a timely manner.
+Contributions are welcome! You can submit issues requesting new features or bug fixes, or you can also develop your own features for inclusion. If choosing the latter option, please make branch names descriptive of the included contribution. A pull request approval is required for adding contributions to the main branch; we will do our best to address these and any issues that are submitted in a timely manner.
 
 ## References
 
