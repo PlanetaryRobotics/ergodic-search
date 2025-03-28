@@ -252,6 +252,8 @@ class ErgLoss(torch.nn.Module):
             # however MOES uses (-4/2) and that seems to produce better results, at least for this implementation
             lambdak = (1. + torch.linalg.norm(k / torch.pi, dim=1)**2)**(-4./2.)
         else:
-            lambdak = torch.tensor(freq_wts)
+            if not isinstance(freq_wts, torch.Tensor):
+                freq_wts = torch.tensor(freq_wts)
+            lambdak = freq_wts
         return lambdak
 
