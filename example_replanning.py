@@ -100,6 +100,6 @@ if __name__ == "__main__":
             planner.update_pdf(new_map)
 
         # "take a step" along the trajectory
-        # this will increment the controls such that the planner will start at the first point in the trajectory and 
+        # this will increment the controls such that the planner will start at the first point in the trajectory
         planner.take_step()
 

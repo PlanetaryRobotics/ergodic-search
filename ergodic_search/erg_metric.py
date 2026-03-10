@@ -150,9 +150,13 @@ class ErgLoss(torch.nn.Module):
         else:
 
             if fourier_freqs is not None:
+                if not isinstance(fourier_freqs, torch.Tensor):
+                    fourier_freqs = torch.tensor(fourier_freqs)
                 self.fourier_freqs = fourier_freqs
             
             if freq_wts is not None:
+                if not isinstance(freq_wts, torch.Tensor):
+                    freq_wts = torch.tensor(freq_wts)
                 self.freq_wts = freq_wts
             
             self.pdf = pdf
@@ -248,6 +252,8 @@ class ErgLoss(torch.nn.Module):
             # however MOES uses (-4/2) and that seems to produce better results, at least for this implementation
             lambdak = (1. + torch.linalg.norm(k / torch.pi, dim=1)**2)**(-4./2.)
         else:
+            if not isinstance(freq_wts, torch.Tensor):
+                freq_wts = torch.tensor(freq_wts)
             lambdak = freq_wts
         return lambdak
 

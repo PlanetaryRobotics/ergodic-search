@@ -34,6 +34,7 @@ def ErgArgs():
     parser.add_argument('--debug', action='store_true', help='Whether to print loss components for debugging')
     parser.add_argument('--outpath', type=str, help='File path to save images to, None displays them in a window', default=None)
     parser.add_argument('--replan_type', type=str, default='full', help='Type of replanning to perform (accepts partial or full)')
+    parser.add_argument('--seed', type=str, default=687456, help='Seed to set for PyTorch stochastic optimization')
     args = parser.parse_args()
     print(args)
 
@@ -62,6 +63,9 @@ class ErgPlanner():
         # store information
         self.args = args
         self.pdf = pdf
+
+        # set seed
+        torch.random.manual_seed(args.seed)
 
         # get device
         self.device = torch.device("cuda") if args.gpu else torch.device("cpu")
